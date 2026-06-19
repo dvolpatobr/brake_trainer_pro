@@ -6,11 +6,18 @@ brake-training-sim-racing/
   README.md
   build/
     brake_trainer_pro.spec
+  installer/
+    windows/
+      BrakeTrainerPro.iss
   docs/
     architecture.md
     packaging.md
     structure.md
+    windows-build.md
     windows-install.md
+  .github/
+    workflows/
+      windows-build.yml
   src/
     brake_trainer_pro/
       __init__.py
@@ -28,9 +35,11 @@ brake-training-sim-racing/
         __init__.py
         main_window.py
         widgets.py
+  scripts/
+    windows/
+      build_release.ps1
   tests/
     test_config.py
     test_database.py
     test_training.py
 ```
-

@@ -14,6 +14,10 @@ Treinador local de frenagem para sim racing com suporte a HID/DirectInput, foco 
 python -m brake_trainer_pro
 ```
 
+## Build Windows 11
+
+Veja [docs/windows-build.md](docs/windows-build.md) para o fluxo completo de empacotamento com PyInstaller e Inno Setup.
+
 ## Estrutura
 
 - `src/brake_trainer_pro/`

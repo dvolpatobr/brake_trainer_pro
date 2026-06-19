@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files
+
+ROOT = Path.cwd()
+SCRIPT = ROOT / "src" / "brake_trainer_pro" / "main.py"
 
 datas = collect_data_files("PyQt6")
 
 a = Analysis(
-    ["src/brake_trainer_pro/main.py"],
-    pathex=["."],
+    [str(SCRIPT)],
+    pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
     hiddenimports=[],
@@ -38,4 +43,3 @@ coll = COLLECT(
     upx_exclude=[],
     name="BrakeTrainerPro",
 )
-

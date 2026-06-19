@@ -1,0 +1,13 @@
+/dist/
+/build/brake_trainer_pro/
+/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
