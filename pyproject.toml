@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brake-trainer-pro"
+version = "0.1.0"
+description = "Brake Trainer Pro for sim racing practice"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "PyQt6>=6.7",
+  "pygame>=2.6",
+]
+
+[project.scripts]
+brake-trainer-pro = "brake_trainer_pro.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
