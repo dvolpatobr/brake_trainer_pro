@@ -248,6 +248,19 @@ class MainWindow(QMainWindow):
 
     def _build_settings_tab(self, parent: QWidget) -> None:
         layout = QVBoxLayout(parent)
+        
+        # Device selection group
+        device_group = QGroupBox("Dispositivos HID")
+        device_form = QFormLayout(device_group)
+        self.settings_brake_device_combo = QComboBox()
+        self.settings_steer_device_combo = QComboBox()
+        self.settings_brake_device_combo.currentIndexChanged.connect(self._device_selection_changed)
+        self.settings_steer_device_combo.currentIndexChanged.connect(self._device_selection_changed)
+        device_form.addRow("Brake", self.settings_brake_device_combo)
+        device_form.addRow("Steering", self.settings_steer_device_combo)
+        layout.addWidget(device_group)
+        
+        # Settings group
         group = QGroupBox("Ajustes")
         form = QFormLayout(group)
         self.hold_tolerance = QDoubleSpinBox()
@@ -332,6 +345,28 @@ class MainWindow(QMainWindow):
             self.current_mode_label.setText(MODE_LABELS[mode_id])
 
     def _device_selection_changed(self) -> None:
+        # Sync device selections between Live and Settings tabs
+        if self.sender() in [self.settings_brake_device_combo, self.settings_steer_device_combo]:
+            # Settings combo changed, update Live combo
+            if self.sender() == self.settings_brake_device_combo:
+                self.brake_device_combo.blockSignals(True)
+                self.brake_device_combo.setCurrentIndex(self.settings_brake_device_combo.currentIndex())
+                self.brake_device_combo.blockSignals(False)
+            else:
+                self.steer_device_combo.blockSignals(True)
+                self.steer_device_combo.setCurrentIndex(self.settings_steer_device_combo.currentIndex())
+                self.steer_device_combo.blockSignals(False)
+        else:
+            # Live combo changed, update Settings combo
+            if self.sender() == self.brake_device_combo:
+                self.settings_brake_device_combo.blockSignals(True)
+                self.settings_brake_device_combo.setCurrentIndex(self.brake_device_combo.currentIndex())
+                self.settings_brake_device_combo.blockSignals(False)
+            elif self.sender() == self.steer_device_combo:
+                self.settings_steer_device_combo.blockSignals(True)
+                self.settings_steer_device_combo.setCurrentIndex(self.steer_device_combo.currentIndex())
+                self.settings_steer_device_combo.blockSignals(False)
+        
         self._populate_axis_combos()
         self._sync_config_from_controls()
 
@@ -370,6 +405,8 @@ class MainWindow(QMainWindow):
             self.devices = []
         self._fill_device_combo(self.brake_device_combo, self.config.brake.device_id)
         self._fill_device_combo(self.steer_device_combo, self.config.steering.device_id)
+        self._fill_device_combo(self.settings_brake_device_combo, self.config.brake.device_id)
+        self._fill_device_combo(self.settings_steer_device_combo, self.config.steering.device_id)
         self._populate_axis_combos()
         if self.devices:
             self.btn_start.setEnabled(True)
@@ -425,6 +462,8 @@ class MainWindow(QMainWindow):
         self.wheel_range.setValue(profile.wheel_range_deg)
         self._fill_device_combo(self.brake_device_combo, profile.brake.device_id)
         self._fill_device_combo(self.steer_device_combo, profile.steering.device_id)
+        self._fill_device_combo(self.settings_brake_device_combo, profile.brake.device_id)
+        self._fill_device_combo(self.settings_steer_device_combo, profile.steering.device_id)
         self._populate_axis_combos()
         self._loading_controls = False
         self.statusBar().showMessage(f"Perfil {name} carregado.")
