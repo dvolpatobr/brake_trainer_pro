@@ -1,136 +1,227 @@
 # Guia de Inicialização - Brake Trainer Pro
 
-Este documento descreve o procedimento passo a passo para configurar e executar o projeto Brake Trainer Pro em sua máquina local.
+Este documento descreve o procedimento passo a passo para configurar e executar o projeto Brake Trainer Pro. Instruções específicas para **Windows 11**.
 
 ## Pré-requisitos
 
-- **Python 3.9+** (3.12+ recomendado)
-- **Git**
-- **pip** (gerenciador de pacotes Python)
+- **Python 3.9+** (3.12+ recomendado) - [Download Python](https://www.python.org/downloads/)
+- **Git** - [Download Git for Windows](https://git-scm.com/download/win)
+- **Terminal**: PowerShell ou Command Prompt (recomendado: PowerShell)
+- **Acesso à internet** para clonar repositório e baixar dependências
 
-Verifique se você tem Python instalado:
+### Verificar Instalação
 
-```bash
-python3 --version
+Abra o PowerShell e verifique se Python está instalado:
+
+```powershell
+python --version
+git --version
 ```
 
 ## Passo 1: Clonar o Repositório
 
-Clone o repositório do projeto para sua máquina:
+Abra o PowerShell e execute:
 
-```bash
+```powershell
 git clone https://github.com/dvolpatobr/brake_trainer_pro.git
 cd brake_trainer_pro
 ```
 
 ## Passo 2: Criar um Ambiente Virtual (venv)
 
-Um ambiente virtual isolado evita conflitos de dependências com outros projetos Python.
+**IMPORTANTE**: Se receber erro de permissão ao executar scripts, abra o PowerShell como **Administrador**.
 
-### macOS/Linux:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### Windows:
-
-```bash
+```powershell
+# Criar o ambiente virtual
 python -m venv venv
-venv\Scripts\activate
+
+# Ativar o ambiente virtual
+venv\Scripts\Activate
 ```
 
-Você saberá que o ambiente está ativado quando o nome `(venv)` aparecer no seu prompt.
+**Você saberá que o ambiente está ativado quando verá `(venv)` no seu prompt:**
+
+```
+(venv) PS C:\Users\seu_usuario\brake_trainer_pro>
+```
+
+### Solução: Erro de Execução de Script
+
+Se receber erro: `cannot be loaded because running scripts is disabled on this system`
+
+Execute como administrador:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Digite 'Y' para confirmar
+```
+
+Depois tente ativar novamente.
 
 ## Passo 3: Atualizar pip e Ferramentas de Build
 
-Com o ambiente virtual ativado, atualize pip, setuptools e wheel:
+Com o ambiente virtual ativado:
 
-```bash
-pip install --upgrade pip setuptools wheel
+```powershell
+python -m pip install --upgrade pip setuptools wheel
 ```
 
-## Passo 4: Instalar Dependências
+Isso pode levar alguns minutos na primeira vez.
 
-Instale o projeto e todas as suas dependências em modo editable:
+## Passo 4: Instalar Dependências do Projeto
 
-```bash
+Com o venv ativado, instale o projeto em modo editável:
+
+```powershell
 pip install -e .
 ```
 
-Este comando vai instalar:
-- **PyQt6** (>=6.7) - Interface gráfica
-- **pygame** (>=2.6) - Suporte a eventos HID/DirectInput
+Este comando instalará:
+- **PyQt6** (>=6.7) - Interface gráfica moderna
+- **pygame** (>=2.6) - Suporte a HID/DirectInput para joysticks e pedais
+
+### Monitorar a Instalação
+
+A instalação deve exibir algo como:
+
+```
+Collecting PyQt6>=6.7
+Collecting pygame>=2.6
+...
+Successfully installed PyQt6-6.10.2 pygame-2.6.1 brake-trainer-pro-0.1.0
+```
+
+Se houver erros, veja a seção **Solução de Problemas**.
 
 ## Passo 5: Executar a Aplicação
 
-Com o ambiente virtual ativado, execute a aplicação:
+Com o venv ativado, execute:
 
-```bash
+```powershell
 brake-trainer-pro
 ```
 
-Ou alternativamente:
+**Ou alternativamente:**
 
-```bash
+```powershell
 python -m brake_trainer_pro
 ```
 
-A janela principal da aplicação deve aparecer.
+A janela principal da aplicação deve aparecer em alguns segundos.
 
 ## Desativar o Ambiente Virtual
 
-Quando terminar, desative o ambiente virtual:
+Quando terminar com o desenvolvimento:
 
-```bash
+```powershell
 deactivate
 ```
 
-## Solução de Problemas
+O `(venv)` desaparecerá do seu prompt.
 
-### Erro: "Python version X.Y not in '>=3.12'"
+## Próximas Vezes
 
-Se você receber um erro sobre versão Python insuficiente, ajuste `pyproject.toml`:
+Para executar novamente no futuro:
 
-```toml
-requires-python = ">=3.9"  # Ajuste conforme sua versão
+```powershell
+cd C:\caminho\para\brake_trainer_pro
+venv\Scripts\Activate
+brake-trainer-pro
 ```
 
-### Erro: "PyQt6 não está instalado"
+## Solução de Problemas - Windows 11
 
-Garanta que a instalação completa foi feita:
+### ❌ Erro: "Python is not recognized"
 
-```bash
+**Solução**: Python não está no PATH do Windows
+
+1. Abra: `Configurações > Variáveis de Ambiente`
+2. Adicione o caminho Python (ex: `C:\Users\seu_usuario\AppData\Local\Programs\Python\Python312`)
+3. Reinicie o PowerShell
+
+Ou reinstale Python marcando **"Add Python to PATH"** durante a instalação.
+
+### ❌ Erro: "cannot be loaded because running scripts is disabled"
+
+Execute como administrador:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### ❌ Erro: "Python version X.Y not in '>=3.12'"
+
+Se usar Python 3.9, edite `pyproject.toml`:
+
+```toml
+requires-python = ">=3.9"
+```
+
+Depois reinstale:
+
+```powershell
 pip install -e . --no-cache-dir
 ```
 
-### Erro de permissão no Windows
+### ❌ Erro: "PyQt6 installation failed"
 
-Se receber erro de permissão ao ativar o venv, execute o PowerShell como administrador.
+Tente instalar novamente com:
 
-## Próximos Passos
+```powershell
+pip install --no-cache-dir PyQt6>=6.7
+```
 
-1. Consulte [docs/structure.md](docs/structure.md) para entender a arquitetura do projeto
-2. Veja [docs/architecture.md](docs/architecture.md) para detalhes sobre os componentes principais
-3. Para compilar para Windows, consulte [docs/windows-build.md](docs/windows-build.md)
+Se persistir, garanta que tem Visual C++ Redistributable instalado:
+[Download Visual C++ Redistributable](https://support.microsoft.com/en-us/help/2977003)
+
+### ❌ Erro: "Failed to build wheel"
+
+Limpe o cache e tente novamente:
+
+```powershell
+pip cache purge
+pip install -e .
+```
+
+### ⚠️ Aviso: Fonte "Segoe UI" não encontrada
+
+Isso é apenas um aviso visual e não afeta a funcionalidade. Você pode ignorá-lo.
+
+## Documentação Adicional
+
+- [Estrutura do Projeto](docs/structure.md)
+- [Arquitetura da Aplicação](docs/architecture.md)
+- [Build para Windows 11](docs/windows-build.md)
+- [Empacotamento e Instalação](docs/packaging.md)
 
 ## Executar Testes
 
-Se deseja executar os testes do projeto:
+Para validar a instalação, execute os testes:
 
-```bash
+```powershell
 pip install pytest
 pytest tests/
 ```
 
-## Build para Distribuição
+## Build para Distribuição (Windows 11)
 
-Para criar um executável standalone para Windows:
+Para criar um executável `.exe` para distribuir:
 
-```bash
+```powershell
 pip install pyinstaller
 python scripts/windows/build_release.ps1
 ```
 
-Veja [docs/windows-build.md](docs/windows-build.md) para instruções detalhadas.
+Veja [docs/windows-build.md](docs/windows-build.md) para detalhes completos.
+
+## Suporte e Contribuição
+
+Para problemas não listados:
+
+1. Verifique [GitHub Issues](https://github.com/dvolpatobr/brake_trainer_pro/issues)
+2. Abra uma nova issue com detalhes do erro
+3. Inclua a saída de: `python --version` e `pip --version`
+
+---
+
+**Última atualização**: 2026-06-20
