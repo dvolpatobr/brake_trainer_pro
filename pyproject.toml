@@ -7,7 +7,7 @@ name = "brake-trainer-pro"
 version = "0.1.0"
 description = "Brake Trainer Pro for sim racing practice"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.9"
 dependencies = [
   "PyQt6>=6.7",
   "pygame>=2.6",

@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QDoubleSpinBox,
+    QScrollArea,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Brake Trainer Pro")
-        self.resize(1500, 960)
+        self.resize(1200, 800)
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
         self.db = Database(self._database_path())
@@ -101,15 +102,31 @@ class MainWindow(QMainWindow):
 
         tabs = QTabWidget()
         root_layout.addWidget(tabs, 1)
-        live_tab = QWidget()
-        stats_tab = QWidget()
-        settings_tab = QWidget()
-        tabs.addTab(live_tab, "Live")
-        tabs.addTab(stats_tab, "Stats")
-        tabs.addTab(settings_tab, "Settings")
-        self._build_live_tab(live_tab)
-        self._build_stats_tab(stats_tab)
-        self._build_settings_tab(settings_tab)
+        
+        # Live tab with scroll
+        live_tab_widget = QWidget()
+        live_scroll = QScrollArea()
+        live_scroll.setWidget(live_tab_widget)
+        live_scroll.setWidgetResizable(True)
+        tabs.addTab(live_scroll, "Live")
+        
+        # Stats tab with scroll
+        stats_tab_widget = QWidget()
+        stats_scroll = QScrollArea()
+        stats_scroll.setWidget(stats_tab_widget)
+        stats_scroll.setWidgetResizable(True)
+        tabs.addTab(stats_scroll, "Stats")
+        
+        # Settings tab with scroll
+        settings_tab_widget = QWidget()
+        settings_scroll = QScrollArea()
+        settings_scroll.setWidget(settings_tab_widget)
+        settings_scroll.setWidgetResizable(True)
+        tabs.addTab(settings_scroll, "Settings")
+        
+        self._build_live_tab(live_tab_widget)
+        self._build_stats_tab(stats_tab_widget)
+        self._build_settings_tab(settings_tab_widget)
 
         self.statusBar().showMessage("Pronto")
 
