@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from PyQt6.QtCore import Qt, QRectF, QSize
+from PyQt6.QtCore import Qt, QRectF, QSize, QPointF
 from PyQt6.QtGui import QColor, QPainter, QPen, QFont
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
 
@@ -85,6 +85,94 @@ class TelemetryGauge(QWidget):
             painter.setFont(font)
             painter.setPen(QColor("#9aa8bb"))
             painter.drawText(rect.adjusted(12, 0, -12, -12), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, self.subtext)
+
+
+class AxisTargetWidget(QWidget):
+    def __init__(self, title: str, orientation: str = "vertical") -> None:
+        super().__init__()
+        self.title = title
+        self.orientation = orientation
+        self.value = 0.0
+        self.target = 0.0
+        self.completed = False
+        self.final_score = 0.0
+        self.setMinimumSize(QSize(240, 260))
+
+    def set_state(self, value: float, target: float = 0.0, orientation: str = "vertical", completed: bool = False, final_score: float = 0.0) -> None:
+        self.value = value
+        self.target = target
+        self.orientation = orientation
+        self.completed = completed
+        self.final_score = final_score
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(12, 12, -12, -12)
+        painter.fillRect(self.rect(), QColor("#10141d"))
+        painter.setPen(QPen(QColor("#2b3240"), 2))
+        painter.setBrush(QColor("#141a24"))
+        painter.drawRoundedRect(rect, 18, 18)
+        painter.setPen(QColor("#d6deea"))
+        font = QFont()
+        font.setPointSize(11)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(rect.adjusted(12, 10, -12, -rect.height() + 44), Qt.AlignmentFlag.AlignHCenter, self.title)
+
+        if self.completed:
+            font.setPointSize(32)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor("#55d6be"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{self.final_score:.0f}")
+            font.setPointSize(12)
+            font.setBold(False)
+            painter.setFont(font)
+            painter.setPen(QColor("#9aa8bb"))
+            painter.drawText(rect.adjusted(0, 64, 0, 0), Qt.AlignmentFlag.AlignHCenter, "PONTUAÇÃO FINAL")
+            return
+
+        content = rect.adjusted(16, 48, -16, -16)
+        if self.orientation == "horizontal":
+            bar = QRectF(content.left(), content.center().y() - 18, content.width(), 36)
+            painter.setBrush(QColor("#1b2330"))
+            painter.setPen(QPen(QColor("#2b3240"), 2))
+            painter.drawRoundedRect(bar, 18, 18)
+            target_x = bar.left() + (self.target / 100.0) * bar.width()
+            painter.setBrush(QColor("#55d6be22"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            target_rect = QRectF(target_x - 6, bar.top(), 12, bar.height())
+            painter.drawRect(target_rect)
+            painter.setPen(QPen(QColor("#eaf0f8"), 4))
+            value_x = bar.left() + (self.value / 100.0) * bar.width()
+            painter.drawLine(bar.left(), bar.center().y(), value_x, bar.center().y())
+            painter.drawEllipse(QPointF(value_x, bar.center().y()), 6, 6)
+            painter.setPen(QColor("#9aa8bb"))
+            font.setPointSize(10)
+            painter.setFont(font)
+            painter.drawText(bar.adjusted(0, -24, 0, 0), Qt.AlignmentFlag.AlignLeft, f"Alvo {self.target:.0f}%")
+            painter.drawText(bar.adjusted(0, 24, 0, 0), Qt.AlignmentFlag.AlignLeft, f"Valor {self.value:.0f}%")
+        else:
+            bar = QRectF(content.center().x() - 18, content.top(), 36, content.height())
+            painter.setBrush(QColor("#1b2330"))
+            painter.setPen(QPen(QColor("#2b3240"), 2))
+            painter.drawRoundedRect(bar, 18, 18)
+            target_y = bar.bottom() - (self.target / 100.0) * bar.height()
+            painter.setBrush(QColor("#55d6be22"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            target_rect = QRectF(bar.left(), target_y - 6, bar.width(), 12)
+            painter.drawRect(target_rect)
+            painter.setPen(QPen(QColor("#eaf0f8"), 4))
+            value_y = bar.bottom() - (self.value / 100.0) * bar.height()
+            painter.drawLine(bar.left(), value_y, bar.right(), value_y)
+            painter.drawEllipse(QPointF(bar.center().x(), value_y), 6, 6)
+            painter.setPen(QColor("#9aa8bb"))
+            font.setPointSize(10)
+            painter.setFont(font)
+            painter.drawText(bar.adjusted(-48, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"{self.value:.0f}%")
+            painter.drawText(bar.adjusted(0, 0, 48, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"Alvo {self.target:.0f}%")
 
 
 class TrendWidget(QWidget):

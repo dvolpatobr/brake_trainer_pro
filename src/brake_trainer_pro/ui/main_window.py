@@ -38,7 +38,7 @@ from ..devices import DeviceBackendUnavailable, DeviceManager
 from ..models import AppConfig, DetectedDevice, MODE_LABELS, ModeId, SessionSummary
 from ..paths import export_dir
 from ..training import TrainingSession
-from .widgets import StatCard, TelemetryGauge, TrendWidget
+from .widgets import AxisTargetWidget, StatCard, TelemetryGauge, TrendWidget
 
 
 def _mode_items() -> list[tuple[str, ModeId]]:
@@ -193,6 +193,12 @@ class MainWindow(QMainWindow):
 
         self.brake_gauge = TelemetryGauge("Brake")
         self.steer_gauge = TelemetryGauge("Steering", suffix=" deg")
+        self.axis_target = AxisTargetWidget("Brake Target")
+        self.axis_target_alt = AxisTargetWidget("Brake Target", orientation="horizontal")
+        self.axis_display_mode = QComboBox()
+        self.axis_display_mode.addItem("Vertical", "vertical")
+        self.axis_display_mode.addItem("Horizontal", "horizontal")
+        self.axis_display_mode.currentIndexChanged.connect(self._axis_display_mode_changed)
         self.score_card = StatCard("Score", "0")
         self.combo_card = StatCard("Combo", "0")
         self.target_card = StatCard("Target", "0")
@@ -209,7 +215,14 @@ class MainWindow(QMainWindow):
         for card in [self.score_card, self.combo_card, self.target_card, self.elapsed_card]:
             top_cards.addWidget(card)
         right.addLayout(top_cards)
+        axis_mode_row = QHBoxLayout()
+        axis_mode_row.addWidget(QLabel("Exibição de eixo:"))
+        axis_mode_row.addWidget(self.axis_display_mode)
+        axis_mode_row.addStretch(1)
+        right.addLayout(axis_mode_row)
         right.addWidget(self.brake_gauge)
+        right.addWidget(self.axis_target)
+        right.addWidget(self.axis_target_alt)
         right.addWidget(self.steer_gauge)
         right.addWidget(self.trend, 1)
         right.addWidget(self.history_log, 1)
@@ -343,6 +356,18 @@ class MainWindow(QMainWindow):
         if self.current_session is None:
             mode_id = ModeId(self.mode_combo.currentData())
             self.current_mode_label.setText(MODE_LABELS[mode_id])
+
+    def _axis_display_mode_changed(self) -> None:
+        self._update_axis_display_visibility()
+
+    def _update_axis_display_visibility(self) -> None:
+        mode = self.axis_display_mode.currentData()
+        if mode == "horizontal":
+            self.axis_target.hide()
+            self.axis_target_alt.show()
+        else:
+            self.axis_target.show()
+            self.axis_target_alt.hide()
 
     def _device_selection_changed(self) -> None:
         # Sync device selections between Live and Settings tabs
@@ -507,6 +532,9 @@ class MainWindow(QMainWindow):
         self.current_mode_label.setText(MODE_LABELS[mode_id])
         self.history_log.clear()
         self.brake_gauge.set_state(0.0, 0.0, "Sessao ativa")
+        self.axis_target.set_state(0.0, 0.0, orientation="vertical")
+        self.axis_target_alt.set_state(0.0, 0.0, orientation="horizontal")
+        self._update_axis_display_visibility()
         self.steer_gauge.set_state(0.0, 0.0, "Sessao ativa")
         self.feedback_label.setText("Sessao iniciada.")
 
@@ -542,6 +570,8 @@ class MainWindow(QMainWindow):
             notes=self.current_session.exercise.feedback,
         )
         self.db.save_session(summary, samples)
+        self.axis_target.set_state(0.0, 0.0, orientation="vertical", completed=True, final_score=summary.score)
+        self.axis_target_alt.set_state(0.0, 0.0, orientation="horizontal", completed=True, final_score=summary.score)
         self.refresh_stats()
         self.refresh_profiles()
 
@@ -557,6 +587,9 @@ class MainWindow(QMainWindow):
     def tick(self) -> None:
         brake_pct, steering_deg = self._read_input()
         self.brake_gauge.set_state(brake_pct, self.current_target_pct(), f"{self.config.brake.device_name or 'Brake'}")
+        self.axis_target.set_state(brake_pct, self.current_target_pct(), orientation="vertical")
+        self.axis_target_alt.set_state(brake_pct, self.current_target_pct(), orientation="horizontal")
+        self._update_axis_display_visibility()
         self.steer_gauge.set_state(steering_deg, 0.0, f"{self.config.steering.device_name or 'Steering'}")
         if self.current_session is None:
             self.score_card.set_value("0")
