@@ -78,7 +78,7 @@ pip install -e .
 
 Este comando instalará:
 - **PyQt6** (>=6.7) - Interface gráfica moderna
-- **pygame** (>=2.6) - Suporte a HID/DirectInput para joysticks e pedais
+- **pygame-ce** (>=2.5.6) - Suporte a HID/DirectInput para joysticks e pedais
 
 ### Monitorar a Instalação
 
@@ -108,6 +108,21 @@ python -m brake_trainer_pro
 ```
 
 A janela principal da aplicação deve aparecer em alguns segundos.
+
+### Versão web local
+Para testar o protótipo web em Chrome/Edge no próprio computador, execute um servidor local a partir da raiz do projeto:
+
+```powershell
+python -m http.server 8000
+```
+
+Em seguida, abra no navegador:
+
+```text
+http://localhost:8000/web/index.html
+```
+
+O WebHID funciona em HTTPS ou local host no Chrome/Edge.
 
 ## Desativar o Ambiente Virtual
 

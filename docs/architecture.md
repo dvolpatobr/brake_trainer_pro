@@ -46,3 +46,10 @@ Aplicacao desktop local para treinar frenagem em simuladores, com leitura de HID
 - ranking local e cloud sync
 - atualizador com manifest remoto assinado
 
+## Protótipo Web
+
+- `web/` contém uma versão estática para Chrome/Edge com WebHID.
+- desafios são salvos em `localStorage` no navegador.
+- o protótipo funciona em HTTPS ou localhost, sem backend.
+- limitações: suporte HID genérico, dependência de navegador, sem calibração nativa e sem sincronização entre dispositivos.
+

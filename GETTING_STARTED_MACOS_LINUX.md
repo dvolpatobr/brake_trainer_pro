@@ -50,7 +50,7 @@ pip install -e .
 
 Este comando instalará:
 - **PyQt6** (>=6.7) - Interface gráfica
-- **pygame** (>=2.6) - Suporte a HID/DirectInput
+- **pygame-ce** (>=2.5.6) - Suporte a HID/DirectInput
 
 ## Passo 5: Executar a Aplicação
 
@@ -64,6 +64,19 @@ Ou:
 
 ```bash
 python -m brake_trainer_pro
+```
+
+### Versão web local
+Para testar o protótipo web em Chrome/Edge no próprio computador, execute um servidor local a partir da raiz do projeto:
+
+```bash
+python3 -m http.server 8000
+```
+
+Depois abra:
+
+```text
+http://localhost:8000/web/index.html
 ```
 
 ## Desativar o Ambiente Virtual

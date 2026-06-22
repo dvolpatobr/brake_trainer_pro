@@ -1,6 +1,6 @@
 /dist/
-/build/brake_trainer_pro/
-/__pycache__/
+build/brake_trainer_pro/
+__pycache__/
 **/__pycache__/
 *.pyc
 *.pyo
@@ -10,4 +10,7 @@
 .ruff_cache/
 .coverage
 htmlcov/
+venv/
+src/*.egg-info/
+.vscode/
 

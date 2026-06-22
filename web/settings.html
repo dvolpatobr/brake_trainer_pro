@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configurações - Brake Trainer Pro Web</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="settings">
+  <header class="site-header">
+    <h1>Configurações</h1>
+  </header>
+
+  <main class="page-container">
+    <section class="settings-card">
+      <h2>Dispositivos HID</h2>
+      <button id="request-device" class="button">Permitir dispositivo HID</button>
+      <div id="device-list" class="device-list"></div>
+      <label>
+        <span>Dispositivo de freio</span>
+        <select id="brake-device"></select>
+      </label>
+      <label>
+        <span>Dispositivo de direção</span>
+        <select id="steering-device"></select>
+      </label>
+    </section>
+
+    <section class="settings-card">
+      <h2>Configuração</h2>
+      <label>
+        <span>Target do desafio</span>
+        <input id="target-value" type="number" min="0" max="100" value="50" />
+      </label>
+      <label>
+        <span>Tempo do desafio (s)</span>
+        <input id="challenge-duration" type="number" min="5" max="120" value="10" />
+      </label>
+      <label>
+        <span>Modo visualização</span>
+        <select id="display-mode">
+          <option value="vertical">Vertical</option>
+          <option value="horizontal">Horizontal</option>
+        </select>
+      </label>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="button" href="index.html">Voltar</a>
+    <a class="button" href="challenge.html">Ir para desafio</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

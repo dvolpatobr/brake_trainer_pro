@@ -18,6 +18,7 @@ brake-training-sim-racing/
   .github/
     workflows/
       windows-build.yml
+      web-pages.yml
   src/
     brake_trainer_pro/
       __init__.py
@@ -35,6 +36,13 @@ brake-training-sim-racing/
         __init__.py
         main_window.py
         widgets.py
+  web/
+    index.html
+    settings.html
+    challenge.html
+    results.html
+    styles.css
+    app.js
   scripts/
     windows/
       build_release.ps1
