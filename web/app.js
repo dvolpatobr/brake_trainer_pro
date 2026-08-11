@@ -106,7 +106,7 @@ const runtime = {
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.12.0';
+const APP_VERSION = 'v0.13.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
@@ -1732,7 +1732,10 @@ const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
   const frame = challenge?.currentFrame || challenge?.previewFrame || null;
   const config = challenge?.plan?.settings || getBrakePrecisionSettings();
   const phase = frame?.phase || challenge?.plan?.phases?.[0] || null;
-  const currentValue = getSelectedRoleValueOrZero('brake');
+  const completed = Boolean(challenge?.completed);
+  const currentValue = completed
+    ? Math.round(challenge?.samples?.[challenge.samples.length - 1]?.values?.brake ?? getSelectedRoleValueOrZero('brake'))
+    : getSelectedRoleValueOrZero('brake');
   const targetValue = Math.round(frame?.targets?.brake?.[0] ?? frame?.targets?.brake ?? currentValue);
   const tolerance = config.tolerance;
   const stepIndex = challenge?.plan?.phases && frame?.phase
@@ -1747,20 +1750,29 @@ const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
     ? Math.max(0, stepDurationMs - activeStepElapsed)
     : stepDurationMs;
   const withinTolerance = Math.abs(currentValue - targetValue) <= tolerance;
+  const finalScore = completed && challenge?.result?.score != null
+    ? Math.round(challenge.result.score)
+    : null;
   const timerText = runtime.activeChallenge
     ? formatCountdownSeconds(remainingMs)
-    : `${Math.round(stepDurationMs / 1000)}s total`;
+    : completed
+      ? 'Finalizado'
+      : `${Math.round(stepDurationMs / 1000)}s total`;
 
   visualizer.innerHTML = `
-    <div class="precision-panel precision-panel--brake">
+    <div class="precision-panel precision-panel--brake${completed ? ' precision-panel--completed' : ''}">
       <div class="precision-panel__header">
         <div>
-          <p class="section-eyebrow">STEP ${stepIndex + 1} DE ${stepTotal}</p>
+          <p class="section-eyebrow">${completed ? 'Resultado final' : `STEP ${stepIndex + 1} DE ${stepTotal}`}</p>
           <h3>${frame?.phase?.name || definition.title}</h3>
         </div>
         <div class="precision-panel__score">
-          <span>Acurácia</span>
-          <strong>${runtime.activeChallenge?.liveScore != null ? `${Math.round(runtime.activeChallenge.liveScore)}%` : '--'}</strong>
+          <span>Score</span>
+          <strong>${runtime.activeChallenge?.liveScore != null
+            ? `${Math.round(runtime.activeChallenge.liveScore)}%`
+            : finalScore != null
+              ? `${finalScore}%`
+              : '--'}</strong>
         </div>
       </div>
       <div class="precision-panel__content">
@@ -1774,18 +1786,20 @@ const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
           </div>
           <div class="precision-meter__footer">ALVO: ${targetValue}% ±${tolerance}% • ${stepTotal} passos</div>
         </div>
-        <div class="precision-ring">
+          <div class="precision-ring">
           <span>TEMPO</span>
-          <div class="precision-ring__circle" style="--progress: ${frame && runtime.activeChallenge ? clamp(1 - (remainingMs / Math.max(1, stepDurationMs)), 0, 1) : 0};">
+          <div class="precision-ring__circle" style="--progress: ${frame && runtime.activeChallenge ? clamp(1 - (remainingMs / Math.max(1, stepDurationMs)), 0, 1) : completed ? 1 : 0};">
             <strong>${timerText}</strong>
           </div>
           <small>${Math.round(stepDurationMs / 1000)}s total</small>
         </div>
       </div>
-      <div class="precision-panel__status ${runtime.activeChallenge && withinTolerance ? 'precision-panel__status--good' : ''}">
+      <div class="precision-panel__status ${completed || (runtime.activeChallenge && withinTolerance) ? 'precision-panel__status--good' : ''}">
         ${runtime.activeChallenge
           ? (withinTolerance ? 'NA ZONA - MANTENHA!' : 'Ajuste fino da pressão')
-          : 'Aguardando início'}
+          : completed
+            ? 'RODADA FINALIZADA'
+            : 'Aguardando início'}
       </div>
     </div>
   `;
@@ -1904,7 +1918,9 @@ const drawVisualizer = () => {
   const definition = getCurrentChallengeDefinition();
   const presentationMode = getChallengeVisualizationMode(definition);
   const challenge = runtime.activeChallenge || runtime.pendingChallenge
-    || (presentationMode === 'trail-graph' ? runtime.lastCompletedChallenge : null);
+    || (presentationMode === 'trail-graph' || presentationMode === 'brake-precision'
+      ? runtime.lastCompletedChallenge
+      : null);
 
   visualizer.innerHTML = '';
   visualizer.className = `challenge-visualizer challenge-visualizer--${presentationMode}`;

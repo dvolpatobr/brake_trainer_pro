@@ -713,6 +713,28 @@ select {
   gap: 16px;
 }
 
+.precision-panel--completed {
+  padding: 16px;
+  border: 1px solid rgba(123, 184, 255, 0.55);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(18, 34, 56, 0.42), rgba(17, 24, 33, 0.96));
+  box-shadow: 0 0 0 1px rgba(123, 184, 255, 0.1) inset, 0 14px 36px rgba(90, 160, 255, 0.12);
+}
+
+.precision-panel--completed .precision-panel__score strong {
+  color: #80b7ff;
+}
+
+.precision-panel--completed .precision-meter__fill {
+  background: linear-gradient(180deg, rgba(128, 183, 255, 0.96), rgba(82, 138, 255, 0.72));
+  box-shadow: 0 0 20px rgba(128, 183, 255, 0.3);
+}
+
+.precision-panel--completed .precision-meter__target {
+  background: #80b7ff;
+  box-shadow: 0 0 12px rgba(128, 183, 255, 0.4);
+}
+
 .trail-panel--completed {
   padding: 16px;
   border: 1px solid rgba(82, 225, 177, 0.55);
