@@ -14,17 +14,37 @@
   <main class="page-container">
     <section class="settings-card">
       <h2>Dispositivos HID</h2>
-      <p>Autorize quantos dispositivos precisar. Depois escolha um para freio e outro para direção.</p>
-      <button id="request-device" class="button">Adicionar dispositivo HID</button>
-      <div id="device-list" class="device-list"></div>
-      <label>
-        <span>Dispositivo de freio</span>
-        <select id="brake-device"></select>
-      </label>
-      <label>
-        <span>Dispositivo de direção</span>
-        <select id="steering-device"></select>
-      </label>
+      <p>Adicione um dispositivo para cada função. Use uma caixa para freio e outra para direção.</p>
+
+      <div class="device-grid">
+        <div class="device-panel">
+          <h3>Freio</h3>
+          <p id="brake-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
+          <button id="add-brake-device" class="button">Adicionar dispositivo de freio</button>
+          <label>
+            <span>Selecionar freio</span>
+            <select id="brake-device"></select>
+          </label>
+          <label>
+            <span>Eixo do freio</span>
+            <select id="brake-axis"></select>
+          </label>
+        </div>
+
+        <div class="device-panel">
+          <h3>Direção</h3>
+          <p id="steering-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
+          <button id="add-steering-device" class="button">Adicionar dispositivo de direção</button>
+          <label>
+            <span>Selecionar direção</span>
+            <select id="steering-device"></select>
+          </label>
+          <label>
+            <span>Eixo da direção</span>
+            <select id="steering-axis"></select>
+          </label>
+        </div>
+      </div>
     </section>
 
     <section class="settings-card">

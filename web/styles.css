@@ -103,6 +103,29 @@ select {
   gap: 12px;
 }
 
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.device-panel {
+  border: 1px solid #2a3240;
+  border-radius: 16px;
+  padding: 18px;
+  background: #0f1319;
+}
+
+.device-panel h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.device-status {
+  margin: 0 0 14px;
+  color: #96a5ba;
+}
+
 .device-item,
 .result-item {
   background: #111821;
@@ -144,5 +167,9 @@ select {
   .button-row,
   .challenge-row {
     flex-direction: column;
+  }
+
+  .device-grid {
+    grid-template-columns: 1fr;
   }
 }
