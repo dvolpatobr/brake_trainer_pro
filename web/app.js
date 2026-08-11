@@ -2,6 +2,7 @@ const storageKey = 'brake-trainer-pro-web-state';
 
 const initState = () => ({
   devices: [],
+  deviceValues: {},
   selectedBrakeDeviceId: null,
   selectedSteeringDeviceId: null,
   currentValue: 0,
@@ -13,9 +14,8 @@ const initState = () => ({
   challenges: [],
 });
 
-const defaultState = initState();
-
 const getState = () => {
+  const defaultState = initState();
   const saved = localStorage.getItem(storageKey);
   if (!saved) {
     return defaultState;
@@ -31,6 +31,7 @@ const getState = () => {
         ...(parsed.config || {}),
       },
       devices: parsed.devices || defaultState.devices,
+      deviceValues: parsed.deviceValues || defaultState.deviceValues,
       challenges: parsed.challenges || defaultState.challenges,
     };
   } catch (error) {
@@ -51,6 +52,30 @@ const page = document.body.dataset.page;
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
+const getDeviceValue = (deviceId) => {
+  const value = state.deviceValues[deviceId];
+  return Number.isFinite(value) ? value : null;
+};
+
+const mergeAuthorizedDevices = (devices) => {
+  const byId = new Map(state.devices.map((device) => [device.deviceId, device]));
+  devices.forEach((device) => {
+    byId.set(device.deviceId, {
+      ...byId.get(device.deviceId),
+      ...device,
+    });
+  });
+  state.devices = Array.from(byId.values());
+};
+
+const refreshSelectedBrakeValue = () => {
+  const value = getDeviceValue(state.selectedBrakeDeviceId);
+  state.currentValue = value ?? 0;
+  const currentText = document.getElementById('current-value');
+  if (currentText) {
+    currentText.textContent = `${state.currentValue}%`;
+  }
+};
 
 const updateConfig = () => {
   saveState(state);
@@ -100,6 +125,16 @@ const updateDeviceSelectors = () => {
   brakeSelect.innerHTML = '';
   steeringSelect.innerHTML = '';
 
+  const brakePlaceholder = document.createElement('option');
+  brakePlaceholder.value = '';
+  brakePlaceholder.textContent = 'Selecione o freio';
+  brakeSelect.appendChild(brakePlaceholder);
+
+  const steeringPlaceholder = document.createElement('option');
+  steeringPlaceholder.value = '';
+  steeringPlaceholder.textContent = 'Selecione a direção';
+  steeringSelect.appendChild(steeringPlaceholder);
+
   state.devices.forEach((device) => {
     addOption(brakeSelect, device);
     addOption(steeringSelect, device);
@@ -124,18 +159,44 @@ const normalizeReportValue = (data) => {
 };
 
 const onInputReport = (event) => {
+  const sourceDevice = event.device || event.target;
+  const deviceId = sourceDevice ? toDeviceId(sourceDevice) : null;
   const value = normalizeReportValue(event.data);
-  state.currentValue = value;
+
+  if (deviceId) {
+    state.deviceValues[deviceId] = value;
+    if (deviceId === state.selectedBrakeDeviceId) {
+      state.currentValue = value;
+    }
+  } else {
+    state.currentValue = value;
+  }
+
   const currentText = document.getElementById('current-value');
-  if (currentText) {
+  if (currentText && deviceId === state.selectedBrakeDeviceId) {
     currentText.textContent = `${value}%`;
   }
+};
+
+const refreshAuthorizedDevices = async () => {
+  if (!navigator.hid) return [];
+
+  const devices = await navigator.hid.getDevices();
+  const mapped = devices.map((device) => ({
+    productName: device.productName,
+    vendorId: device.vendorId,
+    productId: device.productId,
+    deviceId: toDeviceId(device),
+  }));
+
+  mergeAuthorizedDevices(mapped);
+  return mapped;
 };
 
 const setupHIDListeners = async () => {
   if (!navigator.hid) return;
 
-  const devices = await navigator.hid.getDevices();
+  const devices = await refreshAuthorizedDevices();
   devices.forEach(async (device) => {
     const id = toDeviceId(device);
     if (!activeDevices.has(id)) {
@@ -154,24 +215,33 @@ const setupHIDListeners = async () => {
 
 const requestHID = async () => {
   try {
-    const devices = await navigator.hid.requestDevice({ filters: [] });
-    state.devices = Array.from(devices).map((device) => ({
+    const requestedDevices = await navigator.hid.requestDevice({ filters: [] });
+    const devices = Array.from(requestedDevices).map((device) => ({
       productName: device.productName,
       vendorId: device.vendorId,
       productId: device.productId,
       deviceId: toDeviceId(device),
     }));
 
-    if (!state.selectedBrakeDeviceId && state.devices.length) {
-      state.selectedBrakeDeviceId = state.devices[0].deviceId;
+    mergeAuthorizedDevices(devices);
+
+    if (!state.selectedBrakeDeviceId && devices.length) {
+      state.selectedBrakeDeviceId = devices[0].deviceId;
     }
-    if (!state.selectedSteeringDeviceId && state.devices.length) {
-      state.selectedSteeringDeviceId = state.devices[0].deviceId;
+    if (!state.selectedSteeringDeviceId) {
+      const steeringCandidate =
+        devices.find((device) => device.deviceId !== state.selectedBrakeDeviceId) ||
+        state.devices.find((device) => device.deviceId !== state.selectedBrakeDeviceId);
+
+      if (steeringCandidate) {
+        state.selectedSteeringDeviceId = steeringCandidate.deviceId;
+      }
     }
 
     await setupHIDListeners();
     renderDeviceList();
     updateDeviceSelectors();
+    refreshSelectedBrakeValue();
     updateConfig();
   } catch (error) {
     console.warn('HID request failed', error);
@@ -222,15 +292,16 @@ const bindSettings = () => {
 
   if (brakeSelect) {
     brakeSelect.addEventListener('change', (event) => {
-      state.selectedBrakeDeviceId = event.target.value;
+      state.selectedBrakeDeviceId = event.target.value || null;
       updateConfig();
       renderDeviceList();
+      refreshSelectedBrakeValue();
     });
   }
 
   if (steeringSelect) {
     steeringSelect.addEventListener('change', (event) => {
-      state.selectedSteeringDeviceId = event.target.value;
+      state.selectedSteeringDeviceId = event.target.value || null;
       updateConfig();
       renderDeviceList();
     });
@@ -397,7 +468,9 @@ const initPage = async () => {
   }
 
   if (navigator.hid) {
+    await refreshAuthorizedDevices();
     await setupHIDListeners();
+    refreshSelectedBrakeValue();
   }
 
   if (page === 'settings') {
