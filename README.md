@@ -3,7 +3,10 @@
 Treinador web de frenagem para sim racing, feito para Chrome e Edge com WebHID e armazenamento local.
 
 - leitura de brake axis e steering wheel angle
+- leitura de brake, steering e throttle com seleção por eixo
 - modos de treino para memória muscular, modulação e trail braking
+- desafios locais de brake precision, trail braking e input synchronization
+- carteira de piloto com notas por habilidade sem backend
 - persistência em `localStorage`
 - interface web em HTML/CSS/JavaScript
 

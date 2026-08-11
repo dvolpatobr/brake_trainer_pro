@@ -62,6 +62,29 @@
             </div>
           </div>
         </div>
+
+        <div class="device-panel">
+          <h3>Acelerador</h3>
+          <p id="throttle-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
+          <button id="add-throttle-device" class="button">Adicionar dispositivo de acelerador</button>
+          <label>
+            <span>Selecionar acelerador</span>
+            <select id="throttle-device"></select>
+          </label>
+          <label>
+            <span>Eixo do acelerador</span>
+            <select id="throttle-axis"></select>
+          </label>
+          <div class="axis-meter axis-meter--throttle">
+            <div class="axis-meter__header">
+              <span>Leitura do eixo</span>
+              <strong id="throttle-axis-value">0%</strong>
+            </div>
+            <div class="axis-meter__track" aria-hidden="true">
+              <div id="throttle-axis-fill" class="axis-meter__fill"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

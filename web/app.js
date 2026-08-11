@@ -9,8 +9,11 @@ const initState = () => ({
   selectedBrakeAxisIndex: 0,
   selectedSteeringDeviceId: null,
   selectedSteeringAxisIndex: 0,
+  selectedThrottleDeviceId: null,
+  selectedThrottleAxisIndex: 0,
   currentBrakeValue: 0,
   currentSteeringValue: 0,
+  currentThrottleValue: 0,
   currentValue: 0,
   config: {
     target: 50,
@@ -18,6 +21,9 @@ const initState = () => ({
     displayMode: 'vertical',
   },
   challenges: [],
+  ui: {
+    selectedChallengeType: 'brake-precision',
+  },
 });
 
 const getState = () => {
@@ -40,6 +46,10 @@ const getState = () => {
       deviceValues: parsed.deviceValues || defaultState.deviceValues,
       deviceReports: parsed.deviceReports || defaultState.deviceReports,
       deviceAxisCounts: parsed.deviceAxisCounts || defaultState.deviceAxisCounts,
+      selectedThrottleDeviceId: parsed.selectedThrottleDeviceId || defaultState.selectedThrottleDeviceId,
+      selectedThrottleAxisIndex: Number.isFinite(Number(parsed.selectedThrottleAxisIndex))
+        ? Number(parsed.selectedThrottleAxisIndex)
+        : defaultState.selectedThrottleAxisIndex,
       selectedBrakeAxisIndex: Number.isFinite(Number(parsed.selectedBrakeAxisIndex))
         ? Number(parsed.selectedBrakeAxisIndex)
         : defaultState.selectedBrakeAxisIndex,
@@ -47,6 +57,10 @@ const getState = () => {
         ? Number(parsed.selectedSteeringAxisIndex)
         : defaultState.selectedSteeringAxisIndex,
       challenges: parsed.challenges || defaultState.challenges,
+      ui: {
+        ...defaultState.ui,
+        ...(parsed.ui || {}),
+      },
     };
   } catch (error) {
     console.warn('Falha ao ler localStorage:', error);
@@ -60,15 +74,54 @@ const saveState = (state) => {
 
 const state = getState();
 const activeDevices = new Map();
+const runtime = {
+  activeChallenge: null,
+  timerId: null,
+};
 
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.2.0';
+const APP_VERSION = 'v0.4.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
 const getAxisLabel = (axisIndex) => `Eixo ${axisIndex + 1}`;
+const ROLE_DEFS = {
+  brake: {
+    label: 'Freio',
+    shortLabel: 'Brake',
+    colorClass: 'brake',
+    deviceSelectId: 'brake-device',
+    axisSelectId: 'brake-axis',
+    meterFillId: 'brake-axis-fill',
+    meterValueId: 'brake-axis-value',
+    challengeValueId: 'challenge-brake-value',
+    challengeTargetId: 'challenge-brake-target',
+  },
+  steering: {
+    label: 'Direção',
+    shortLabel: 'Steering',
+    colorClass: 'steering',
+    deviceSelectId: 'steering-device',
+    axisSelectId: 'steering-axis',
+    meterFillId: 'steering-axis-fill',
+    meterValueId: 'steering-axis-value',
+    challengeValueId: 'challenge-steering-value',
+    challengeTargetId: 'challenge-steering-target',
+  },
+  throttle: {
+    label: 'Acelerador',
+    shortLabel: 'Throttle',
+    colorClass: 'throttle',
+    deviceSelectId: 'throttle-device',
+    axisSelectId: 'throttle-axis',
+    meterFillId: 'throttle-axis-fill',
+    meterValueId: 'throttle-axis-value',
+    challengeValueId: 'challenge-throttle-value',
+    challengeTargetId: 'challenge-throttle-target',
+  },
+};
 const mapHIDDeviceToSummary = (device) => ({
   productName: device.productName,
   vendorId: device.vendorId,
@@ -98,6 +151,7 @@ const getDeviceAxisCount = (deviceId) => {
   const reportCount = getDeviceReportBytes(deviceId).length;
   return Math.max(1, storedCount, reportCount);
 };
+const getRoleKeys = () => Object.keys(ROLE_DEFS);
 const getRoleSelection = (role) => {
   if (role === 'brake') {
     return {
@@ -106,9 +160,16 @@ const getRoleSelection = (role) => {
     };
   }
 
+  if (role === 'steering') {
+    return {
+      deviceId: state.selectedSteeringDeviceId,
+      axisIndex: state.selectedSteeringAxisIndex,
+    };
+  }
+
   return {
-    deviceId: state.selectedSteeringDeviceId,
-    axisIndex: state.selectedSteeringAxisIndex,
+    deviceId: state.selectedThrottleDeviceId,
+    axisIndex: state.selectedThrottleAxisIndex,
   };
 };
 const setRoleAxisIndex = (role, axisIndex) => {
@@ -118,6 +179,10 @@ const setRoleAxisIndex = (role, axisIndex) => {
 
   if (role === 'steering') {
     state.selectedSteeringAxisIndex = axisIndex;
+  }
+
+  if (role === 'throttle') {
+    state.selectedThrottleAxisIndex = axisIndex;
   }
 };
 const getRoleAxisIndex = (role) => getRoleSelection(role).axisIndex || 0;
@@ -143,6 +208,7 @@ const getSelectedRoleValue = (role) => {
 
   return getDeviceValue(selection.deviceId, selection.axisIndex);
 };
+const getSelectedRoleValueOrZero = (role) => getSelectedRoleValue(role) ?? 0;
 const updateVersionLabels = () => {
   document.querySelectorAll('[data-version-label]').forEach((node) => {
     node.textContent = APP_VERSION;
@@ -161,36 +227,22 @@ const mergeAuthorizedDevices = (devices) => {
 };
 
 const renderSelectedDeviceSummary = () => {
-  const brakeStatus = document.getElementById('brake-device-status');
-  const steeringStatus = document.getElementById('steering-device-status');
+  getRoleKeys().forEach((role) => {
+    const statusNode = document.getElementById(`${role}-device-status`);
+    if (!statusNode) return;
 
-  if (brakeStatus) {
-    const brakeDevice = getSelectedDevice(state.selectedBrakeDeviceId);
-    brakeStatus.textContent = brakeDevice
-      ? `Selecionado: ${getDeviceLabel(brakeDevice)} · ${getAxisLabel(state.selectedBrakeAxisIndex || 0)}`
-      : 'Nenhum dispositivo selecionado.';
-  }
+    const selection = getRoleSelection(role);
+    const selectedDevice = getSelectedDevice(selection.deviceId);
+    const label = ROLE_DEFS[role].label;
 
-  if (steeringStatus) {
-    const steeringDevice = getSelectedDevice(state.selectedSteeringDeviceId);
-    steeringStatus.textContent = steeringDevice
-      ? `Selecionado: ${getDeviceLabel(steeringDevice)} · ${getAxisLabel(state.selectedSteeringAxisIndex || 0)}`
-      : 'Nenhum dispositivo selecionado.';
-  }
+    statusNode.textContent = selectedDevice
+      ? `Selecionado: ${getDeviceLabel(selectedDevice)} · ${getAxisLabel(selection.axisIndex || 0)}`
+      : `Nenhum dispositivo selecionado para ${label.toLowerCase()}.`;
+  });
 };
 
 const refreshLiveReadouts = () => {
-  const brakeValue = getSelectedRoleValue('brake') ?? 0;
-  const steeringValue = getSelectedRoleValue('steering') ?? 0;
-
-  state.currentBrakeValue = brakeValue;
-  state.currentSteeringValue = steeringValue;
-  state.currentValue = brakeValue;
-
-  const brakeText = document.getElementById('current-value');
-  if (brakeText) {
-    brakeText.textContent = `${brakeValue}%`;
-  }
+  const currentValues = {};
 
   const updateMeter = (fillId, valueId, value) => {
     const fill = document.getElementById(fillId);
@@ -205,17 +257,33 @@ const refreshLiveReadouts = () => {
     }
   };
 
-  updateMeter('brake-axis-fill', 'brake-axis-value', brakeValue);
-  updateMeter('steering-axis-fill', 'steering-axis-value', steeringValue);
+  getRoleKeys().forEach((role) => {
+    const value = getSelectedRoleValueOrZero(role);
+    currentValues[role] = value;
 
-  const challengeBrakeValue = document.getElementById('challenge-brake-value');
-  if (challengeBrakeValue) {
-    challengeBrakeValue.textContent = `${brakeValue}%`;
-  }
+    const roleDef = ROLE_DEFS[role];
+    updateMeter(roleDef.meterFillId, roleDef.meterValueId, value);
 
-  const challengeSteeringValue = document.getElementById('challenge-steering-value');
-  if (challengeSteeringValue) {
-    challengeSteeringValue.textContent = `${steeringValue}%`;
+    const challengeValue = document.getElementById(roleDef.challengeValueId);
+    if (challengeValue) {
+      challengeValue.textContent = `${value}%`;
+    }
+
+    const targetValue = runtime.activeChallenge?.currentFrame?.targets?.[role];
+    const challengeTarget = document.getElementById(roleDef.challengeTargetId);
+    if (challengeTarget) {
+      challengeTarget.textContent = `Target ${Math.round(Number.isFinite(targetValue) ? targetValue : value)}%`;
+    }
+  });
+
+  state.currentBrakeValue = currentValues.brake || 0;
+  state.currentSteeringValue = currentValues.steering || 0;
+  state.currentThrottleValue = currentValues.throttle || 0;
+  state.currentValue = state.currentBrakeValue;
+
+  const brakeText = document.getElementById('current-value');
+  if (brakeText) {
+    brakeText.textContent = `${state.currentBrakeValue}%`;
   }
 
   const visualizer = document.getElementById('visualizer');
@@ -236,6 +304,13 @@ const setSelectedDeviceForRole = (role, deviceId) => {
     state.selectedSteeringDeviceId = deviceId || null;
     if (!deviceId) {
       state.selectedSteeringAxisIndex = 0;
+    }
+  }
+
+  if (role === 'throttle') {
+    state.selectedThrottleDeviceId = deviceId || null;
+    if (!deviceId) {
+      state.selectedThrottleAxisIndex = 0;
     }
   }
 
@@ -260,11 +335,14 @@ const updateConfig = () => {
 const getSelectedDevice = (deviceId) => state.devices.find((device) => device.deviceId === deviceId);
 
 const updateDeviceSelectors = () => {
-  const brakeSelect = document.getElementById('brake-device');
-  const steeringSelect = document.getElementById('steering-device');
-  const brakeAxisSelect = document.getElementById('brake-axis');
-  const steeringAxisSelect = document.getElementById('steering-axis');
-  if (!brakeSelect || !steeringSelect) return;
+  const roleSelects = getRoleKeys().reduce((acc, role) => {
+    acc[role] = {
+      deviceSelect: document.getElementById(ROLE_DEFS[role].deviceSelectId),
+      axisSelect: document.getElementById(ROLE_DEFS[role].axisSelectId),
+    };
+    return acc;
+  }, {});
+  if (!roleSelects.brake.deviceSelect || !roleSelects.steering.deviceSelect || !roleSelects.throttle.deviceSelect) return;
 
   const addOption = (select, device) => {
     const option = document.createElement('option');
@@ -303,36 +381,30 @@ const updateDeviceSelectors = () => {
     select.value = String(currentAxisIndex);
   };
 
-  brakeSelect.innerHTML = '';
-  steeringSelect.innerHTML = '';
+  getRoleKeys().forEach((role) => {
+    const deviceSelect = roleSelects[role].deviceSelect;
+    const axisSelect = roleSelects[role].axisSelect;
+    if (!deviceSelect) return;
 
-  const brakePlaceholder = document.createElement('option');
-  brakePlaceholder.value = '';
-  brakePlaceholder.textContent = 'Selecione o freio';
-  brakeSelect.appendChild(brakePlaceholder);
+    deviceSelect.innerHTML = '';
 
-  const steeringPlaceholder = document.createElement('option');
-  steeringPlaceholder.value = '';
-  steeringPlaceholder.textContent = 'Selecione a direção';
-  steeringSelect.appendChild(steeringPlaceholder);
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = `Selecione ${ROLE_DEFS[role].label.toLowerCase()}`;
+    deviceSelect.appendChild(placeholder);
 
-  state.devices.forEach((device) => {
-    addOption(brakeSelect, device);
-    addOption(steeringSelect, device);
+    if (state.devices.length === 0) {
+      deviceSelect.disabled = true;
+    } else {
+      deviceSelect.disabled = false;
+      const selection = getRoleSelection(role);
+      if (selection.deviceId) {
+        deviceSelect.value = selection.deviceId;
+      }
+    }
+
+    populateAxisSelect(axisSelect, role, getRoleSelection(role).deviceId);
   });
-
-  brakeSelect.disabled = state.devices.length === 0;
-  steeringSelect.disabled = state.devices.length === 0;
-
-  if (state.selectedBrakeDeviceId) {
-    brakeSelect.value = state.selectedBrakeDeviceId;
-  }
-  if (state.selectedSteeringDeviceId) {
-    steeringSelect.value = state.selectedSteeringDeviceId;
-  }
-
-  populateAxisSelect(brakeAxisSelect, 'brake', state.selectedBrakeDeviceId);
-  populateAxisSelect(steeringAxisSelect, 'steering', state.selectedSteeringDeviceId);
 
   renderSelectedDeviceSummary();
 };
@@ -367,7 +439,14 @@ const onInputReport = (event) => {
     if (deviceId === state.selectedBrakeDeviceId) {
       state.currentValue = getSelectedRoleValue('brake') ?? 0;
     }
-    if (axisCountChanged && (deviceId === state.selectedBrakeDeviceId || deviceId === state.selectedSteeringDeviceId)) {
+    if (
+      axisCountChanged
+      && (
+        deviceId === state.selectedBrakeDeviceId
+        || deviceId === state.selectedSteeringDeviceId
+        || deviceId === state.selectedThrottleDeviceId
+      )
+    ) {
       updateDeviceSelectors();
     }
   } else {
@@ -429,6 +508,7 @@ const requestHIDForRole = async (role) => {
 const bindSettings = () => {
   const brakeButton = document.getElementById('add-brake-device');
   const steeringButton = document.getElementById('add-steering-device');
+  const throttleButton = document.getElementById('add-throttle-device');
 
   const bindDeviceButton = (button, role) => {
     if (!button) return;
@@ -444,12 +524,14 @@ const bindSettings = () => {
 
   bindDeviceButton(brakeButton, 'brake');
   bindDeviceButton(steeringButton, 'steering');
+  bindDeviceButton(throttleButton, 'throttle');
 
   const targetInput = document.getElementById('target-value');
   const durationInput = document.getElementById('challenge-duration');
   const displayInput = document.getElementById('display-mode');
   const brakeSelect = document.getElementById('brake-device');
   const steeringSelect = document.getElementById('steering-device');
+  const throttleSelect = document.getElementById('throttle-device');
 
   if (targetInput) {
     targetInput.value = state.config.target;
@@ -487,6 +569,12 @@ const bindSettings = () => {
     });
   }
 
+  if (throttleSelect) {
+    throttleSelect.addEventListener('change', (event) => {
+      setSelectedDeviceForRole('throttle', event.target.value);
+    });
+  }
+
   const brakeAxisSelect = document.getElementById('brake-axis');
   const steeringAxisSelect = document.getElementById('steering-axis');
 
@@ -502,150 +590,937 @@ const bindSettings = () => {
     });
   }
 
+  const throttleAxisSelect = document.getElementById('throttle-axis');
+
+  if (throttleAxisSelect) {
+    throttleAxisSelect.addEventListener('change', (event) => {
+      setSelectedAxisForRole('throttle', event.target.value);
+    });
+  }
+
   updateDeviceSelectors();
+};
+
+const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+const lerp = (start, end, t) => start + ((end - start) * t);
+const roundTo = (value, digits = 1) => {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+};
+const average = (values) => {
+  const filtered = values.filter((value) => Number.isFinite(value));
+  if (filtered.length === 0) {
+    return 0;
+  }
+  return filtered.reduce((sum, value) => sum + value, 0) / filtered.length;
+};
+const stddev = (values) => {
+  const filtered = values.filter((value) => Number.isFinite(value));
+  if (filtered.length <= 1) {
+    return 0;
+  }
+  const mean = average(filtered);
+  const variance = filtered.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / filtered.length;
+  return Math.sqrt(variance);
+};
+const averageDelta = (values) => {
+  if (values.length <= 1) {
+    return 0;
+  }
+  let total = 0;
+  for (let index = 1; index < values.length; index += 1) {
+    total += Math.abs(values[index] - values[index - 1]);
+  }
+  return total / (values.length - 1);
+};
+const correlation = (leftValues, rightValues) => {
+  const pairs = leftValues
+    .map((leftValue, index) => [leftValue, rightValues[index]])
+    .filter(([leftValue, rightValue]) => Number.isFinite(leftValue) && Number.isFinite(rightValue));
+
+  if (pairs.length <= 1) {
+    return 0;
+  }
+
+  const leftMean = average(pairs.map(([leftValue]) => leftValue));
+  const rightMean = average(pairs.map(([, rightValue]) => rightValue));
+  let numerator = 0;
+  let leftVariance = 0;
+  let rightVariance = 0;
+
+  pairs.forEach(([leftValue, rightValue]) => {
+    const leftDelta = leftValue - leftMean;
+    const rightDelta = rightValue - rightMean;
+    numerator += leftDelta * rightDelta;
+    leftVariance += leftDelta ** 2;
+    rightVariance += rightDelta ** 2;
+  });
+
+  const denominator = Math.sqrt(leftVariance * rightVariance);
+  return denominator === 0 ? 0 : numerator / denominator;
+};
+const scoreFromError = (error, multiplier = 2) => clamp(100 - (error * multiplier));
+const scoreFromSmoothness = (delta, multiplier = 3) => clamp(100 - (delta * multiplier));
+const scoreFromSpread = (spread, multiplier = 6) => clamp(100 - (spread * multiplier));
+const createSeededRandom = (seed = Date.now()) => {
+  let stateValue = Math.abs(Math.floor(seed)) % 2147483647;
+  if (stateValue === 0) {
+    stateValue = 1;
+  }
+
+  return () => {
+    stateValue = (stateValue * 16807) % 2147483647;
+    return (stateValue - 1) / 2147483646;
+  };
+};
+const randomInt = (rng, min, max) => Math.round(lerp(min, max, rng()));
+const getRoleValueMap = () => getRoleKeys().reduce((acc, role) => {
+  acc[role] = getSelectedRoleValueOrZero(role);
+  return acc;
+}, {});
+const buildPhases = (phases) => {
+  let startMs = 0;
+  const normalizedPhases = phases.map((phase) => {
+    const durationMs = phase.durationMs;
+    const normalizedPhase = {
+      ...phase,
+      startMs,
+      endMs: startMs + durationMs,
+    };
+    startMs += durationMs;
+    return normalizedPhase;
+  });
+
+  return {
+    phases: normalizedPhases,
+    totalDurationMs: startMs,
+  };
+};
+const getFrameAt = (plan, elapsedMs) => {
+  const activePhase = plan.phases.find((phase) => elapsedMs >= phase.startMs && elapsedMs < phase.endMs)
+    || plan.phases[plan.phases.length - 1];
+  const phaseProgress = clamp((elapsedMs - activePhase.startMs) / Math.max(1, activePhase.durationMs), 0, 1);
+  const targets = {};
+
+  getRoleKeys().forEach((role) => {
+    const range = activePhase.targets?.[role] || [0, 0];
+    targets[role] = lerp(range[0], range[1], phaseProgress);
+  });
+
+  return {
+    phase: activePhase,
+    targets,
+    progress: clamp(elapsedMs / Math.max(1, plan.totalDurationMs), 0, 1),
+  };
+};
+const getSamplesForPhase = (samples, phase) => samples.filter((sample) => sample.elapsedMs >= phase.startMs && sample.elapsedMs < phase.endMs);
+const getAxisSeries = (samples, role, selector = (sample) => sample.values[role]) => samples.map(selector).filter((value) => Number.isFinite(value));
+const getMeanAbsError = (samples, role) => average(samples.map((sample) => Math.abs(sample.values[role] - sample.targets[role])));
+const getMeanTarget = (samples, role) => average(samples.map((sample) => sample.targets[role]));
+const getLastNonZeroIndex = (series, threshold = 1) => {
+  let index = -1;
+  series.forEach((value, currentIndex) => {
+    if (Number.isFinite(value) && value > threshold) {
+      index = currentIndex;
+    }
+  });
+  return index;
+};
+const getFirstAbove = (series, threshold) => series.findIndex((value) => Number.isFinite(value) && value >= threshold);
+
+const CHALLENGE_LIBRARY = {
+  'brake-precision': {
+    id: 'brake-precision',
+    title: 'Brake Precision Challenge',
+    shortTitle: 'Brake Precision',
+    description: 'O app sorteia alvos de freio e você precisa segurar cada valor com estabilidade por 2 segundos.',
+    objective: 'Memória muscular do pé, precisão de frenagem e consistência em alvos aleatórios.',
+    rules: [
+      'Segure o brake dentro da janela de tolerância por 2 segundos.',
+      'Cada rodada traz um novo alvo aleatório.',
+      'Evite oscilações bruscas enquanto mantém o valor.',
+    ],
+    requiredRoles: ['brake'],
+    buildPlan: () => {
+      const rng = createSeededRandom(Date.now());
+      const targets = Array.from({ length: 5 }, () => randomInt(rng, 35, 92));
+      return buildPhases(targets.map((target, index) => ({
+        name: `Rodada ${index + 1}`,
+        label: `Brake Target: ${target}%`,
+        durationMs: 2000,
+        targets: {
+          brake: [target, target],
+          steering: [0, 0],
+          throttle: [0, 0],
+        },
+        target,
+      })));
+    },
+    evaluate: (samples, plan) => {
+      const phaseStats = plan.phases.map((phase) => {
+        const phaseSamples = getSamplesForPhase(samples, phase);
+        const target = phase.target || phase.targets.brake[0];
+        const errors = phaseSamples.map((sample) => Math.abs(sample.values.brake - target));
+        const withinTolerance = phaseSamples.filter((sample) => Math.abs(sample.values.brake - target) <= 3).length;
+        const series = getAxisSeries(phaseSamples, 'brake');
+        return {
+          target,
+          meanError: average(errors),
+          withinRatio: phaseSamples.length ? withinTolerance / phaseSamples.length : 0,
+          smoothness: averageDelta(series),
+          meanValue: average(series),
+        };
+      });
+
+      const accuracy = scoreFromError(average(phaseStats.map((phaseStat) => phaseStat.meanError)), 1.8);
+      const holdStability = clamp(average(phaseStats.map((phaseStat) => phaseStat.withinRatio)) * 100);
+      const brakeModulation = clamp((scoreFromSmoothness(average(phaseStats.map((phaseStat) => phaseStat.smoothness)), 2.2)
+        + holdStability) / 2);
+      const consistency = scoreFromSpread(stddev(phaseStats.map((phaseStat) => phaseStat.meanError)), 10);
+      const overall = roundTo(average([accuracy, holdStability, brakeModulation, consistency]));
+
+      return {
+        challengeType: 'brake-precision',
+        title: 'Brake Precision Challenge',
+        score: overall,
+        summary: `Trail consistente nos alvos de brake. Score final ${overall}/100.`,
+        completedAt: new Date().toISOString(),
+        durationMs: plan.totalDurationMs,
+        skillScores: {
+          brakePrecision: accuracy,
+          brakeModulation,
+          consistency,
+        },
+        metrics: {
+          accuracy,
+          holdStability,
+          brakeModulation,
+          consistency,
+        },
+        plan,
+      };
+    },
+  },
+  'trail-braking': {
+    id: 'trail-braking',
+    title: 'Trail Braking Challenge',
+    shortTitle: 'Trail Braking',
+    description: 'Você enfrenta uma curva simulada onde brake cai enquanto steering sobe, exigindo soltura progressiva e coordenação fina.',
+    objective: 'Desenvolver trail braking suave, controlar a transição brake → steering e manter repetibilidade de curva.',
+    rules: [
+      'Reduza o brake aos poucos durante a entrada da curva.',
+      'A steering precisa crescer de forma progressiva.',
+      'Evite quedas bruscas de brake e movimentos de steering em zigue-zague.',
+    ],
+    requiredRoles: ['brake', 'steering'],
+    buildPlan: () => {
+      const rng = createSeededRandom(Date.now());
+      const scenarios = [
+        { name: 'Curva média à direita', brakeStart: randomInt(rng, 85, 96), steeringPeak: randomInt(rng, 58, 72) },
+        { name: 'Curva rápida à esquerda', brakeStart: randomInt(rng, 88, 98), steeringPeak: randomInt(rng, 48, 62) },
+      ];
+      const scenario = scenarios[randomInt(rng, 0, scenarios.length - 1)];
+      const phases = [];
+
+      for (let rep = 0; rep < 2; rep += 1) {
+        phases.push({
+          name: `Entrada ${rep + 1}`,
+          repIndex: rep,
+          label: `${scenario.name} - entrada`,
+          durationMs: 1200,
+          targets: {
+            brake: [scenario.brakeStart, scenario.brakeStart - 8],
+            steering: [0, 12],
+            throttle: [0, 0],
+          },
+        });
+        phases.push({
+          name: `Transição ${rep + 1}`,
+          repIndex: rep,
+          label: `${scenario.name} - transição`,
+          durationMs: 1600,
+          targets: {
+            brake: [scenario.brakeStart - 8, 12],
+            steering: [12, scenario.steeringPeak],
+            throttle: [0, 0],
+          },
+        });
+        phases.push({
+          name: `Apex ${rep + 1}`,
+          repIndex: rep,
+          label: `${scenario.name} - apex`,
+          durationMs: 900,
+          targets: {
+            brake: [12, 0],
+            steering: [scenario.steeringPeak, scenario.steeringPeak],
+            throttle: [0, 0],
+          },
+        });
+        phases.push({
+          name: `Saída ${rep + 1}`,
+          repIndex: rep,
+          label: `${scenario.name} - saída`,
+          durationMs: 1000,
+          targets: {
+            brake: [0, 0],
+            steering: [scenario.steeringPeak, 30],
+            throttle: [0, 15],
+          },
+        });
+      }
+
+      return {
+        ...buildPhases(phases),
+        scenario,
+      };
+    },
+    evaluate: (samples, plan) => {
+      const brakeErrors = [];
+      const steeringErrors = [];
+      const brakeSeries = [];
+      const steeringSeries = [];
+      const repScores = [];
+
+      plan.phases.forEach((phase) => {
+        const phaseSamples = getSamplesForPhase(samples, phase);
+        brakeErrors.push(...phaseSamples.map((sample) => Math.abs(sample.values.brake - sample.targets.brake)));
+        steeringErrors.push(...phaseSamples.map((sample) => Math.abs(sample.values.steering - sample.targets.steering)));
+        brakeSeries.push(...getAxisSeries(phaseSamples, 'brake'));
+        steeringSeries.push(...getAxisSeries(phaseSamples, 'steering'));
+      });
+
+      for (let rep = 0; rep < 2; rep += 1) {
+        const repPhases = plan.phases.filter((phase) => phase.repIndex === rep);
+        const repSamples = repPhases.flatMap((phase) => getSamplesForPhase(samples, phase));
+        repScores.push(scoreFromError(average(repSamples.map((sample) => Math.abs(sample.values.brake - sample.targets.brake)
+          + Math.abs(sample.values.steering - sample.targets.steering))), 1.2));
+      }
+
+      const transitionSamples = plan.phases
+        .filter((phase) => phase.name.includes('Transição'))
+        .flatMap((phase) => getSamplesForPhase(samples, phase));
+      const brakeVelocity = transitionSamples.map((sample, index) => (index === 0 ? 0 : transitionSamples[index - 1].values.brake - sample.values.brake));
+      const steeringVelocity = transitionSamples.map((sample, index) => (index === 0 ? 0 : sample.values.steering - transitionSamples[index - 1].values.steering));
+      const trailCorrelation = correlation(brakeVelocity.map((value) => Math.max(0, value)), steeringVelocity.map((value) => Math.max(0, value)));
+      const overlapPenalty = transitionSamples.length
+        ? transitionSamples.filter((sample) => sample.values.brake > 25 && sample.values.steering > 20).length / transitionSamples.length
+        : 0;
+
+      const brakePrecision = scoreFromError(average(brakeErrors), 1.5);
+      const steeringPrecision = scoreFromError(average(steeringErrors), 1.5);
+      const trailBraking = clamp(((trailCorrelation + 1) / 2) * 100 - (overlapPenalty * 25));
+      const steeringSmoothness = scoreFromSmoothness(averageDelta(steeringSeries), 2.4);
+      const coordination = clamp(average([trailBraking, steeringPrecision, 100 - (overlapPenalty * 40)]));
+      const consistency = clamp(average(repScores));
+      const overall = roundTo(average([trailBraking, steeringPrecision, steeringSmoothness, coordination, consistency]));
+
+      return {
+        challengeType: 'trail-braking',
+        title: 'Trail Braking Challenge',
+        score: overall,
+        summary: `${plan.scenario.name} executada com ${overall}/100. Foco em suavidade e sincronia.`,
+        completedAt: new Date().toISOString(),
+        durationMs: plan.totalDurationMs,
+        skillScores: {
+          trailBraking,
+          steeringPrecision,
+          steeringSmoothness,
+          coordination,
+          consistency,
+        },
+        metrics: {
+          brakePrecision,
+          steeringPrecision,
+          trailBraking,
+          steeringSmoothness,
+          coordination,
+          consistency,
+        },
+        plan,
+      };
+    },
+  },
+  'input-sync': {
+    id: 'input-sync',
+    title: 'Input Synchronization Challenge',
+    shortTitle: 'Input Sync',
+    description: 'O sistema analisa brake, steering e throttle ao mesmo tempo para validar a sequência correta de entrada e saída de curva.',
+    objective: 'Executar a sequência brake → steering → release brake → throttle → full throttle sem sobreposições desnecessárias.',
+    rules: [
+      'Brake precisa cair antes da saída completa da curva.',
+      'Steering deve subir enquanto o brake é liberado.',
+      'Throttle só deve crescer de verdade quando a curva estiver abrindo.',
+    ],
+    requiredRoles: ['brake', 'steering', 'throttle'],
+    buildPlan: () => {
+      const rng = createSeededRandom(Date.now());
+      const profiles = [
+        { name: 'Entrada de curva rápida', brakeStart: randomInt(rng, 90, 100), steeringPeak: randomInt(rng, 62, 78), throttleExit: randomInt(rng, 90, 100) },
+        { name: 'Entrada de curva média', brakeStart: randomInt(rng, 86, 96), steeringPeak: randomInt(rng, 55, 70), throttleExit: randomInt(rng, 85, 100) },
+      ];
+      const profile = profiles[randomInt(rng, 0, profiles.length - 1)];
+      const phases = [];
+
+      for (let rep = 0; rep < 2; rep += 1) {
+        phases.push({
+          name: `Entrada ${rep + 1}`,
+          repIndex: rep,
+          label: `${profile.name} - entrada`,
+          durationMs: 1400,
+          targets: {
+            brake: [profile.brakeStart, profile.brakeStart - 5],
+            steering: [0, 18],
+            throttle: [0, 0],
+          },
+        });
+        phases.push({
+          name: `Apex ${rep + 1}`,
+          repIndex: rep,
+          label: `${profile.name} - apex`,
+          durationMs: 1800,
+          targets: {
+            brake: [profile.brakeStart - 5, 8],
+            steering: [18, profile.steeringPeak],
+            throttle: [0, 24],
+          },
+        });
+        phases.push({
+          name: `Saída ${rep + 1}`,
+          repIndex: rep,
+          label: `${profile.name} - saída`,
+          durationMs: 1800,
+          targets: {
+            brake: [8, 0],
+            steering: [profile.steeringPeak, 22],
+            throttle: [24, profile.throttleExit],
+          },
+        });
+      }
+
+      return {
+        ...buildPhases(phases),
+        profile,
+      };
+    },
+    evaluate: (samples, plan) => {
+      const brakeErrors = [];
+      const steeringErrors = [];
+      const throttleErrors = [];
+      const brakeSeries = getAxisSeries(samples, 'brake');
+      const steeringSeries = getAxisSeries(samples, 'steering');
+      const throttleSeries = getAxisSeries(samples, 'throttle');
+      const repScores = [];
+
+      plan.phases.forEach((phase) => {
+        const phaseSamples = getSamplesForPhase(samples, phase);
+        brakeErrors.push(...phaseSamples.map((sample) => Math.abs(sample.values.brake - sample.targets.brake)));
+        steeringErrors.push(...phaseSamples.map((sample) => Math.abs(sample.values.steering - sample.targets.steering)));
+        throttleErrors.push(...phaseSamples.map((sample) => Math.abs(sample.values.throttle - sample.targets.throttle)));
+      });
+
+      for (let rep = 0; rep < 2; rep += 1) {
+        const repPhases = plan.phases.filter((phase) => phase.repIndex === rep);
+        const repSamples = repPhases.flatMap((phase) => getSamplesForPhase(samples, phase));
+        const entry = repPhases[0] ? getSamplesForPhase(samples, repPhases[0]) : [];
+        const apex = repPhases[1] ? getSamplesForPhase(samples, repPhases[1]) : [];
+        const exit = repPhases[2] ? getSamplesForPhase(samples, repPhases[2]) : [];
+        const repVariance = stddev(repSamples.map((sample) => Math.abs(sample.values.brake - sample.targets.brake)
+          + Math.abs(sample.values.steering - sample.targets.steering)
+          + Math.abs(sample.values.throttle - sample.targets.throttle)));
+        repScores.push(scoreFromSpread(repVariance, 8));
+
+        const entryBrakeCross = getFirstAbove(entry.map((sample) => 100 - sample.values.brake), 50);
+        const apexSteerCross = getFirstAbove(apex.map((sample) => sample.values.steering), 35);
+        const exitThrottleCross = getFirstAbove(exit.map((sample) => sample.values.throttle), 25);
+        const ordered = entryBrakeCross >= 0 && apexSteerCross >= 0 && exitThrottleCross >= 0
+          && entryBrakeCross <= apexSteerCross
+          && apexSteerCross <= exitThrottleCross;
+        repScores.push(ordered ? 100 : 60);
+      }
+
+      const brakePrecision = scoreFromError(average(brakeErrors), 1.4);
+      const steeringPrecision = scoreFromError(average(steeringErrors), 1.4);
+      const throttleControl = scoreFromError(average(throttleErrors), 1.5);
+      const brakeReleaseSmoothness = scoreFromSmoothness(averageDelta(brakeSeries), 2.1);
+      const steeringSmoothness = scoreFromSmoothness(averageDelta(steeringSeries), 2.0);
+      const exitDrive = clamp((average(throttleSeries.slice(Math.floor(throttleSeries.length / 2))) + (100 - average(brakeSeries.slice(Math.floor(brakeSeries.length / 2))))) / 2);
+      const coordination = clamp(average(repScores));
+      const consistency = clamp(stddev(repScores) ? 100 - (stddev(repScores) * 1.2) : 100);
+      const overall = roundTo(average([brakePrecision, steeringPrecision, throttleControl, brakeReleaseSmoothness, steeringSmoothness, exitDrive, coordination, consistency]));
+
+      return {
+        challengeType: 'input-sync',
+        title: 'Input Synchronization Challenge',
+        score: overall,
+        summary: `${plan.profile.name} concluída com ${overall}/100, medindo sequência e fluidez dos 3 eixos.`,
+        completedAt: new Date().toISOString(),
+        durationMs: plan.totalDurationMs,
+        skillScores: {
+          brakePrecision,
+          steeringPrecision,
+          throttleControl,
+          exitDrive,
+          coordination,
+          consistency,
+        },
+        metrics: {
+          brakePrecision,
+          steeringPrecision,
+          throttleControl,
+          brakeReleaseSmoothness,
+          steeringSmoothness,
+          exitDrive,
+          coordination,
+          consistency,
+        },
+        plan,
+      };
+    },
+  },
+};
+
+const getChallengeDefinition = (challengeType) => CHALLENGE_LIBRARY[challengeType] || CHALLENGE_LIBRARY['brake-precision'];
+
+const getMissingRolesForChallenge = (challengeType) => {
+  const definition = getChallengeDefinition(challengeType);
+  return definition.requiredRoles.filter((role) => !getRoleSelection(role).deviceId);
+};
+
+const getChallengeStatusText = () => {
+  if (!runtime.activeChallenge) {
+    return 'Aguardando ação.';
+  }
+
+  const frame = runtime.activeChallenge.currentFrame;
+  if (!frame) {
+    return 'Desafio em andamento...';
+  }
+
+  const remainingMs = Math.max(0, runtime.activeChallenge.plan.totalDurationMs - runtime.activeChallenge.elapsedMs);
+  return `${frame.phase.name} | ${Math.ceil(remainingMs / 1000)}s restantes`;
+};
+
+const renderChallengeSelector = () => {
+  const container = document.getElementById('challenge-selector');
+  if (!container) return;
+
+  const selectedType = state.ui.selectedChallengeType;
+  container.innerHTML = '';
+
+  Object.values(CHALLENGE_LIBRARY).forEach((definition) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `challenge-chip${selectedType === definition.id ? ' challenge-chip--active' : ''}`;
+    button.dataset.challengeType = definition.id;
+    button.disabled = Boolean(runtime.activeChallenge);
+    button.textContent = definition.shortTitle;
+    button.addEventListener('click', () => {
+      state.ui.selectedChallengeType = definition.id;
+      updateConfig();
+      renderChallengePage();
+    });
+    container.appendChild(button);
+  });
+};
+
+const renderChallengePage = () => {
+  const definition = getChallengeDefinition(state.ui.selectedChallengeType);
+  const titleNode = document.getElementById('challenge-title');
+  const descriptionNode = document.getElementById('challenge-description');
+  const objectiveNode = document.getElementById('challenge-objective');
+  const rulesNode = document.getElementById('challenge-rules');
+  const requirementsNode = document.getElementById('challenge-requirements');
+  const phaseNode = document.getElementById('challenge-phase');
+  const scoreNode = document.getElementById('challenge-score');
+  const timeNode = document.getElementById('challenge-time');
+  const statusNode = document.getElementById('status-text');
+  const startButton = document.getElementById('start-challenge');
+  const challengeMeta = document.getElementById('challenge-meta');
+  const summaryNode = document.getElementById('challenge-summary');
+  const breakdownNode = document.getElementById('challenge-breakdown');
+
+  if (titleNode) titleNode.textContent = definition.title;
+  if (descriptionNode) descriptionNode.textContent = definition.description;
+  if (objectiveNode) objectiveNode.textContent = definition.objective;
+
+  if (rulesNode) {
+    rulesNode.innerHTML = '';
+    definition.rules.forEach((rule) => {
+      const item = document.createElement('li');
+      item.textContent = rule;
+      rulesNode.appendChild(item);
+    });
+  }
+
+  if (requirementsNode) {
+    requirementsNode.innerHTML = '';
+    definition.requiredRoles.forEach((role) => {
+      const pill = document.createElement('span');
+      pill.className = 'requirement-pill';
+      pill.textContent = ROLE_DEFS[role].label;
+      requirementsNode.appendChild(pill);
+    });
+  }
+
+  if (challengeMeta) {
+    const missingRoles = getMissingRolesForChallenge(definition.id);
+    challengeMeta.textContent = missingRoles.length
+      ? `Requer: ${definition.requiredRoles.map((role) => ROLE_DEFS[role].label).join(', ')}`
+      : `Pronto para rodar: ${definition.requiredRoles.map((role) => ROLE_DEFS[role].label).join(', ')}`;
+  }
+
+  if (phaseNode) {
+    phaseNode.textContent = runtime.activeChallenge
+      ? runtime.activeChallenge.currentFrame?.phase.name || 'Preparando fase...'
+      : 'Sem desafio ativo';
+  }
+
+  if (timeNode) {
+    timeNode.textContent = runtime.activeChallenge
+      ? `${Math.ceil(Math.max(0, runtime.activeChallenge.plan.totalDurationMs - runtime.activeChallenge.elapsedMs) / 1000)}s`
+      : '0s';
+  }
+
+  if (scoreNode) {
+    scoreNode.textContent = runtime.activeChallenge?.liveScore != null
+      ? `${Math.round(runtime.activeChallenge.liveScore)}/100`
+      : '--';
+  }
+
+  if (statusNode) {
+    const missingRoles = getMissingRolesForChallenge(definition.id);
+    statusNode.textContent = runtime.activeChallenge
+      ? getChallengeStatusText()
+      : missingRoles.length
+        ? `Selecione: ${missingRoles.map((role) => ROLE_DEFS[role].label.toLowerCase()).join(', ')}.`
+        : 'Pronto para iniciar.';
+  }
+
+  if (startButton) {
+    startButton.disabled = Boolean(runtime.activeChallenge);
+    startButton.textContent = runtime.activeChallenge ? 'Desafio em andamento...' : 'Iniciar desafio';
+  }
+
+  if (summaryNode) {
+    summaryNode.innerHTML = runtime.activeChallenge
+      ? `
+        <div class="summary-box">
+          <span>Score atual</span>
+          <strong>${Math.round(runtime.activeChallenge.liveScore || 0)}/100</strong>
+        </div>
+        <div class="summary-box">
+          <span>Fase</span>
+          <strong>${runtime.activeChallenge.currentFrame?.phase.name || '...'}</strong>
+        </div>
+      `
+      : '<p>Escolha um desafio e conecte os eixos para começar.</p>';
+  }
+
+  if (breakdownNode && !runtime.activeChallenge) {
+    const lastResult = state.challenges[state.challenges.length - 1];
+    breakdownNode.innerHTML = lastResult
+      ? `
+        <div class="score-card">
+          <span class="section-eyebrow">Último resultado</span>
+          <strong>${lastResult.title}</strong>
+          <p>${lastResult.summary || ''}</p>
+        </div>
+      `
+      : '';
+  }
+
+  if (breakdownNode && runtime.activeChallenge) {
+    const targets = runtime.activeChallenge.currentFrame?.targets || {};
+    breakdownNode.innerHTML = `
+      <div class="score-card">
+        <span class="section-eyebrow">Targets da fase</span>
+        <p>Brake: ${Math.round(targets.brake || 0)}%</p>
+        <p>Steering: ${Math.round(targets.steering || 0)}%</p>
+        <p>Throttle: ${Math.round(targets.throttle || 0)}%</p>
+      </div>
+      <div class="score-card">
+        <span class="section-eyebrow">Progresso</span>
+        <p>${Math.round((runtime.activeChallenge.currentFrame?.progress || 0) * 100)}%</p>
+      </div>
+    `;
+  }
+
+  renderChallengeSelector();
+  refreshLiveReadouts();
+  drawVisualizer();
+};
+
+const renderPilotCard = () => {
+  const container = document.getElementById('pilot-card');
+  if (!container) return;
+
+  const skillBuckets = new Map();
+  state.challenges.forEach((challenge) => {
+    Object.entries(challenge.skillScores || {}).forEach(([skill, score]) => {
+      if (!skillBuckets.has(skill)) {
+        skillBuckets.set(skill, []);
+      }
+      skillBuckets.get(skill).push(score);
+    });
+  });
+
+  const skillRows = PILOT_SKILLS.map((skill) => {
+    const values = skillBuckets.get(skill.key) || [];
+    const score = values.length ? roundTo(average(values)) : null;
+    return {
+      ...skill,
+      score,
+      count: values.length,
+    };
+  });
+
+  const populated = skillRows.filter((skill) => skill.score != null);
+  const overall = populated.length ? roundTo(average(populated.map((skill) => skill.score))) : null;
+
+  container.innerHTML = `
+    <div class="pilot-card__header">
+      <div>
+        <p class="section-eyebrow">Carteira de piloto</p>
+        <h3>Pilotagem geral</h3>
+      </div>
+      <div class="pilot-card__score">${overall != null ? `${overall}/100` : '--'}</div>
+    </div>
+    <div class="skill-grid">
+      ${skillRows.map((skill) => `
+        <div class="skill-item">
+          <div class="skill-item__top">
+            <span>${skill.label}</span>
+            <strong>${skill.score != null ? `${Math.round(skill.score)}` : '--'}</strong>
+          </div>
+          <div class="skill-bar">
+            <div class="skill-bar__fill" style="width: ${skill.score != null ? `${skill.score}%` : '0%'}"></div>
+          </div>
+          <small>${skill.count ? `${skill.count} resultado(s)` : 'Sem dados ainda'}</small>
+        </div>
+      `).join('')}
+    </div>
+  `;
 };
 
 const renderResults = () => {
   const resultsList = document.getElementById('results-list');
-  if (!resultsList) return;
-  resultsList.innerHTML = '';
+  if (resultsList) {
+    resultsList.innerHTML = '';
 
-  if (state.challenges.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'result-item';
-    empty.textContent = 'Nenhum desafio registrado ainda.';
-    resultsList.appendChild(empty);
-    return;
+    if (state.challenges.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'result-item';
+      empty.textContent = 'Nenhum desafio registrado ainda.';
+      resultsList.appendChild(empty);
+    } else {
+      state.challenges.slice().reverse().forEach((challenge, index) => {
+        const item = document.createElement('div');
+        item.className = 'result-item';
+        const skillLabelMap = new Map(PILOT_SKILLS.map((skill) => [skill.key, skill.label]));
+        const skillChips = Object.entries(challenge.skillScores || {})
+          .map(([skill, score]) => `<span class="skill-chip">${skillLabelMap.get(skill) || skill}: ${Math.round(score)}</span>`)
+          .join('');
+
+        item.innerHTML = `
+          <div class="result-item__header">
+            <strong>#${state.challenges.length - index}</strong>
+            <span>${challenge.title || challenge.challengeType}</span>
+            <span class="result-score">${Math.round(challenge.score)}/100</span>
+          </div>
+          <p>${challenge.summary || 'Resultado sem descrição.'}</p>
+          <div class="result-item__meta">
+            <span>${challenge.challengeType}</span>
+            <span>${challenge.completedAt ? new Date(challenge.completedAt).toLocaleString('pt-BR') : ''}</span>
+          </div>
+          <div class="result-skill-chips">${skillChips}</div>
+        `;
+        resultsList.appendChild(item);
+      });
+    }
   }
 
-  state.challenges.slice().reverse().forEach((challenge, index) => {
-    const item = document.createElement('div');
-    item.className = 'result-item';
-    item.innerHTML = `
-      <strong>#${state.challenges.length - index}</strong>
-      <p>Target: ${challenge.target}%</p>
-      <p>Score: ${challenge.score.toFixed(1)}</p>
-      <p>Tempo: ${challenge.duration}s</p>
-      <p>Status: ${challenge.success ? 'Concluído' : 'Incompleto'}</p>
-    `;
-    resultsList.appendChild(item);
-  });
+  renderPilotCard();
 };
 
 const drawVisualizer = () => {
   const visualizer = document.getElementById('visualizer');
   if (!visualizer) return;
 
+  const challenge = runtime.activeChallenge;
+  const frame = challenge?.currentFrame;
+  const values = getRoleValueMap();
+  const targets = frame?.targets || values;
+
   visualizer.innerHTML = '';
-  const width = visualizer.clientWidth;
-  const height = visualizer.clientHeight;
-  const target = state.config.target;
-  const brakeCurrent = state.currentBrakeValue ?? 0;
-  const steeringCurrent = state.currentSteeringValue ?? 0;
+  visualizer.className = 'challenge-visualizer';
 
-  const appendLine = (className, position, orientation) => {
-    const line = document.createElement('div');
-    line.className = className;
+  const chart = document.createElement('div');
+  chart.className = 'axis-chart';
 
-    if (orientation === 'horizontal') {
-      line.style.left = '0';
-      line.style.top = `${position}px`;
-      line.style.width = '100%';
-      line.style.height = '4px';
-    } else {
-      line.style.left = `${position}px`;
-      line.style.top = '0';
-      line.style.width = '4px';
-      line.style.height = '100%';
-    }
+  getRoleKeys().forEach((role) => {
+    const roleDef = ROLE_DEFS[role];
+    const currentValue = clamp(values[role] || 0, 0, 100);
+    const targetValue = clamp(targets[role] || 0, 0, 100);
 
-    visualizer.appendChild(line);
-  };
+    const row = document.createElement('div');
+    row.className = `axis-chart__row axis-chart__row--${roleDef.colorClass}`;
+    row.innerHTML = `
+      <div class="axis-chart__label">
+        <span>${roleDef.label}</span>
+        <strong>${Math.round(currentValue)}%</strong>
+      </div>
+      <div class="axis-chart__track">
+        <div class="axis-chart__target" style="left: ${targetValue}%"></div>
+        <div class="axis-chart__current" style="width: ${currentValue}%"></div>
+      </div>
+      <div class="axis-chart__hint">
+        <span>Target ${Math.round(targetValue)}%</span>
+        <span>${role === 'throttle' ? 'Saída' : roleDef.shortLabel}</span>
+      </div>
+    `;
+    chart.appendChild(row);
+  });
 
-  if (state.config.displayMode === 'horizontal') {
-    const targetX = (target / 100) * width;
-    const brakeX = (brakeCurrent / 100) * width;
-    const steeringX = (steeringCurrent / 100) * width;
+  visualizer.appendChild(chart);
 
-    appendLine('target-line', targetX, 'vertical');
-    appendLine('visual-line visual-line--brake', brakeX, 'vertical');
-    appendLine('visual-line visual-line--steering', steeringX, 'vertical');
-  } else {
-    const targetY = height - (target / 100) * height;
-    const brakeY = height - (brakeCurrent / 100) * height;
-    const steeringY = height - (steeringCurrent / 100) * height;
-
-    appendLine('target-line', targetY, 'horizontal');
-    appendLine('visual-line visual-line--brake', brakeY, 'horizontal');
-    appendLine('visual-line visual-line--steering', steeringY, 'horizontal');
+  if (challenge?.plan) {
+    const timeline = document.createElement('div');
+    timeline.className = 'challenge-timeline';
+    challenge.plan.phases.forEach((phase) => {
+      const phaseNode = document.createElement('div');
+      phaseNode.className = `challenge-timeline__phase${frame?.phase === phase ? ' challenge-timeline__phase--active' : ''}`;
+      phaseNode.style.flexGrow = String(phase.durationMs);
+      phaseNode.title = `${phase.name} - ${phase.label || ''}`;
+      phaseNode.textContent = phase.name;
+      timeline.appendChild(phaseNode);
+    });
+    visualizer.appendChild(timeline);
   }
 };
 
-const renderChallenge = () => {
-  const targetText = document.getElementById('challenge-target');
-  const timeText = document.getElementById('challenge-time');
-  const currentText = document.getElementById('current-value');
-  const statusText = document.getElementById('status-text');
+const stopActiveChallenge = () => {
+  if (runtime.timerId) {
+    clearInterval(runtime.timerId);
+    runtime.timerId = null;
+  }
+};
+
+const finalizeChallenge = () => {
+  const challenge = runtime.activeChallenge;
+  if (!challenge) return;
+
+  stopActiveChallenge();
+
+  const result = challenge.definition.evaluate(challenge.samples, challenge.plan);
+  state.challenges.push({
+    ...result,
+    title: challenge.definition.title,
+    duration: Math.round(challenge.plan.totalDurationMs / 1000),
+    target: state.config.target,
+  });
+  updateConfig();
+  runtime.activeChallenge = null;
+  renderResults();
+  renderChallengePage();
+};
+
+const runChallengeTick = () => {
+  const challenge = runtime.activeChallenge;
+  if (!challenge) return;
+
+  const now = Date.now();
+  challenge.elapsedMs = now - challenge.startedAt;
+  if (challenge.elapsedMs > challenge.plan.totalDurationMs) {
+    challenge.elapsedMs = challenge.plan.totalDurationMs;
+  }
+
+  const currentFrame = getFrameAt(challenge.plan, challenge.elapsedMs);
+  challenge.currentFrame = currentFrame;
+  const sample = {
+    elapsedMs: challenge.elapsedMs,
+    phase: currentFrame.phase.name,
+    values: getRoleValueMap(),
+    targets: currentFrame.targets,
+  };
+  challenge.samples.push(sample);
+  const recentScore = challenge.definition.evaluate(challenge.samples, challenge.plan).score;
+  challenge.liveScore = recentScore;
+
+  renderChallengePage();
+
+  if (challenge.elapsedMs >= challenge.plan.totalDurationMs) {
+    finalizeChallenge();
+  }
+};
+
+const startSelectedChallenge = () => {
+  const definition = getChallengeDefinition(state.ui.selectedChallengeType);
+  const missingRoles = getMissingRolesForChallenge(definition.id);
+
+  if (!navigator.hid) {
+    const statusNode = document.getElementById('status-text');
+    if (statusNode) {
+      statusNode.textContent = 'WebHID não disponível. Use Chrome ou Edge.';
+    }
+    return;
+  }
+
+  if (missingRoles.length) {
+    const statusNode = document.getElementById('status-text');
+    if (statusNode) {
+      statusNode.textContent = `Falta configurar: ${missingRoles.map((role) => ROLE_DEFS[role].label.toLowerCase()).join(', ')}.`;
+    }
+    return;
+  }
+
+  stopActiveChallenge();
+  const plan = definition.buildPlan();
+  runtime.activeChallenge = {
+    definition,
+    plan,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    samples: [],
+    currentFrame: getFrameAt(plan, 0),
+    liveScore: 0,
+  };
+  renderChallengePage();
+  runtime.timerId = setInterval(runChallengeTick, 100);
+  runChallengeTick();
+};
+
+const bindChallengeControls = () => {
   const startButton = document.getElementById('start-challenge');
+  if (startButton) {
+    startButton.addEventListener('click', startSelectedChallenge);
+  }
+};
 
-  if (!targetText || !timeText || !currentText || !statusText || !startButton) return;
-
-  targetText.textContent = `${state.config.target}%`;
-  timeText.textContent = `${state.config.duration}s`;
-  statusText.textContent = 'Aguardando ação.';
-
-  let elapsed = 0;
-  let interval = null;
-  const samples = [];
-
-  const refresh = () => {
-    refreshLiveReadouts();
-  };
-
-  const stopChallenge = () => {
-    clearInterval(interval);
-    const average = samples.length ? samples.reduce((sum, value) => sum + value, 0) / samples.length : state.currentValue;
-    const score = Math.max(0, 100 - Math.abs(state.config.target - average));
-    state.challenges.push({
-      target: state.config.target,
-      duration: state.config.duration,
-      score,
-      success: Math.abs(state.config.target - average) <= 10,
-      createdAt: new Date().toISOString(),
-    });
-    updateConfig();
-    statusText.textContent = 'Desafio finalizado! Veja resultados.';
-    renderResults();
-  };
-
-  startButton.addEventListener('click', async () => {
-    if (!navigator.hid) {
-      statusText.textContent = 'WebHID não disponível. Use Chrome.';
-      return;
+const updateStateFromSelectionInputs = () => {
+  getRoleKeys().forEach((role) => {
+    const deviceSelect = document.getElementById(ROLE_DEFS[role].deviceSelectId);
+    const axisSelect = document.getElementById(ROLE_DEFS[role].axisSelectId);
+    if (deviceSelect) {
+      const selection = getRoleSelection(role);
+      deviceSelect.value = selection.deviceId || '';
     }
-
-    if (!state.selectedBrakeDeviceId) {
-      statusText.textContent = 'Nenhum dispositivo de freio selecionado. Vá para Configurações.';
-      return;
+    if (axisSelect) {
+      axisSelect.value = String(getRoleSelection(role).axisIndex || 0);
     }
-
-    statusText.textContent = 'Desafio em andamento...';
-    elapsed = 0;
-    samples.length = 0;
-    refresh();
-
-    interval = setInterval(() => {
-      elapsed += 100;
-      const remaining = Math.max(0, state.config.duration - Math.floor(elapsed / 1000));
-      timeText.textContent = `${remaining}s`;
-      samples.push(state.currentValue);
-      refresh();
-      if (elapsed >= state.config.duration * 1000) {
-        stopChallenge();
-      }
-    }, 100);
   });
 };
+
+const PILOT_SKILLS = [
+  { key: 'brakePrecision', label: 'Precisão de frenagem' },
+  { key: 'brakeModulation', label: 'Modulação de brake' },
+  { key: 'trailBraking', label: 'Trail braking' },
+  { key: 'steeringPrecision', label: 'Precisão de steering' },
+  { key: 'steeringSmoothness', label: 'Suavidade do steering' },
+  { key: 'throttleControl', label: 'Controle de throttle' },
+  { key: 'exitDrive', label: 'Saída de curva' },
+  { key: 'coordination', label: 'Coordenação dos inputs' },
+  { key: 'consistency', label: 'Consistência' },
+];
 
 const initPage = async () => {
   if (!isChrome()) {
@@ -674,11 +1549,13 @@ const initPage = async () => {
   }
 
   if (page === 'challenge') {
-    renderChallenge();
-    refreshLiveReadouts();
+    bindChallengeControls();
+    renderChallengeSelector();
+    renderChallengePage();
   }
 
   updateVersionLabels();
+  updateStateFromSelectionInputs();
 };
 
 window.addEventListener('DOMContentLoaded', initPage);

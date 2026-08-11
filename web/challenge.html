@@ -13,39 +13,76 @@
 
   <main class="page-container">
     <section class="challenge-card">
-      <div class="challenge-row">
+      <div class="challenge-toolbar">
         <div>
-          <h2>Target</h2>
-          <p id="challenge-target">50%</p>
+          <p class="section-eyebrow">Desafios</p>
+          <h2 id="challenge-title">Carregando...</h2>
         </div>
-        <div>
-          <h2>Tempo</h2>
-          <p id="challenge-time">0s</p>
-        </div>
-        <div>
-          <h2>Leitura</h2>
-          <p id="current-value">0%</p>
-        </div>
+        <div id="challenge-meta" class="challenge-meta">Aguardando seleção.</div>
       </div>
-      <div class="challenge-legend">
-        <div class="legend-item legend-item--brake">
-          <span class="legend-swatch legend-swatch--brake"></span>
-          <span>Freio</span>
-          <strong id="challenge-brake-value">0%</strong>
-        </div>
-        <div class="legend-item legend-item--steering">
-          <span class="legend-swatch legend-swatch--steering"></span>
-          <span>Direção</span>
-          <strong id="challenge-steering-value">0%</strong>
-        </div>
-      </div>
-      <div class="challenge-visualizer" id="visualizer"></div>
-      <div class="challenge-status">
-        <p id="status-text">Aguardando dispositivo HID.</p>
-      </div>
-      <div class="button-row">
-        <button id="start-challenge" class="button">Iniciar desafio</button>
-        <a class="button" href="results.html">Ver resultados</a>
+
+      <div id="challenge-selector" class="challenge-selector"></div>
+
+      <div class="challenge-grid">
+        <aside class="challenge-brief">
+          <p id="challenge-description" class="challenge-description">Selecione um desafio para ver os detalhes.</p>
+          <div class="challenge-objective">
+            <span class="section-eyebrow">Objetivo</span>
+            <p id="challenge-objective"></p>
+          </div>
+          <ul id="challenge-rules" class="challenge-rules"></ul>
+          <div id="challenge-requirements" class="challenge-requirements"></div>
+          <div class="button-row">
+            <button id="start-challenge" class="button">Iniciar desafio</button>
+            <a class="button" href="results.html">Ver resultados</a>
+          </div>
+          <div class="challenge-status">
+            <p id="status-text">Aguardando dispositivo HID.</p>
+          </div>
+          <div id="challenge-summary" class="challenge-summary"></div>
+        </aside>
+
+        <section class="challenge-play">
+          <div class="challenge-kpis">
+            <div class="challenge-kpi">
+              <span>Fase</span>
+              <strong id="challenge-phase">---</strong>
+            </div>
+            <div class="challenge-kpi">
+              <span>Score</span>
+              <strong id="challenge-score">--</strong>
+            </div>
+            <div class="challenge-kpi">
+              <span>Tempo</span>
+              <strong id="challenge-time">0s</strong>
+            </div>
+          </div>
+
+          <div class="challenge-telemetry">
+            <div class="telemetry-card telemetry-card--brake">
+              <span>Freio</span>
+              <strong id="challenge-brake-value">0%</strong>
+              <small id="challenge-brake-target">Target 0%</small>
+            </div>
+            <div class="telemetry-card telemetry-card--steering">
+              <span>Direção</span>
+              <strong id="challenge-steering-value">0%</strong>
+              <small id="challenge-steering-target">Target 0%</small>
+            </div>
+            <div class="telemetry-card telemetry-card--throttle">
+              <span>Acelerador</span>
+              <strong id="challenge-throttle-value">0%</strong>
+              <small id="challenge-throttle-target">Target 0%</small>
+            </div>
+          </div>
+
+          <div class="challenge-visualizer" id="visualizer"></div>
+          <div id="challenge-breakdown" class="challenge-breakdown"></div>
+          <div class="challenge-primary-reading">
+            <h3>Leitura principal</h3>
+            <p id="current-value">0%</p>
+          </div>
+        </section>
       </div>
     </section>
   </main>

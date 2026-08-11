@@ -168,11 +168,392 @@ select {
   background: linear-gradient(90deg, #79d7ff 0%, #5aa7ff 100%);
 }
 
+.axis-meter--throttle .axis-meter__fill {
+  background: linear-gradient(90deg, #8df3a7 0%, #3ddc84 100%);
+}
+
 .challenge-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin: 18px 0 0;
+}
+
+.challenge-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.challenge-meta,
+.section-eyebrow {
+  color: #96a5ba;
+}
+
+.section-eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+}
+
+.challenge-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.challenge-chip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid #334055;
+  background: #111821;
+  color: #e6eef8;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.challenge-chip--active {
+  border-color: #7bb8ff;
+  box-shadow: 0 0 0 1px rgba(123, 184, 255, 0.25) inset;
+}
+
+.challenge-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr);
+  gap: 20px;
+}
+
+.challenge-brief,
+.challenge-play,
+.pilot-card {
+  border: 1px solid #22304a;
+  background: rgba(15, 21, 30, 0.8);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.challenge-description {
+  margin-top: 0;
+  color: #e6eef8;
+}
+
+.challenge-objective {
+  padding: 14px;
+  border-radius: 14px;
+  background: #111821;
+  border: 1px solid #1f2c3f;
+  margin: 14px 0;
+}
+
+.challenge-objective p,
+.challenge-rules {
+  margin: 0;
+}
+
+.challenge-rules {
+  padding-left: 18px;
+  color: #c9d6e4;
+  display: grid;
+  gap: 8px;
+}
+
+.challenge-requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+
+.requirement-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #111821;
+  border: 1px solid #1f2c3f;
+  font-size: 13px;
+}
+
+.challenge-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.challenge-kpi {
+  padding: 14px;
+  border-radius: 14px;
+  background: #111821;
+  border: 1px solid #1f2c3f;
+}
+
+.challenge-kpi span {
+  display: block;
+  color: #96a5ba;
+  font-size: 12px;
+  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.challenge-kpi strong {
+  font-size: 22px;
+}
+
+.challenge-telemetry {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.telemetry-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #1f2c3f;
+  background: #111821;
+  display: grid;
+  gap: 6px;
+}
+
+.telemetry-card span {
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.telemetry-card strong {
+  font-size: 24px;
+}
+
+.telemetry-card small {
+  color: #96a5ba;
+}
+
+.telemetry-card--brake strong,
+.telemetry-card--brake small {
+  color: #eaf0f8;
+}
+
+.telemetry-card--steering strong,
+.telemetry-card--steering small {
+  color: #79d7ff;
+}
+
+.telemetry-card--throttle strong,
+.telemetry-card--throttle small {
+  color: #8df3a7;
+}
+
+.challenge-summary,
+.challenge-breakdown {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.summary-box,
+.score-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: #111821;
+  border: 1px solid #1f2c3f;
+}
+
+.summary-box span {
+  display: block;
+  color: #96a5ba;
+  font-size: 12px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.summary-box strong {
+  font-size: 18px;
+}
+
+.challenge-primary-reading {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #1f2c3f;
+  background: #111821;
+}
+
+.challenge-primary-reading h3 {
+  margin: 0 0 8px;
+}
+
+.challenge-primary-reading p {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.axis-chart {
+  display: grid;
+  gap: 14px;
+}
+
+.axis-chart__row {
+  display: grid;
+  gap: 8px;
+}
+
+.axis-chart__label,
+.axis-chart__hint,
+.result-item__header,
+.result-item__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.axis-chart__label strong {
+  color: #e6eef8;
+}
+
+.axis-chart__track {
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid #1f2c3f;
+  background: #0f1319;
+  overflow: hidden;
+}
+
+.axis-chart__current {
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.axis-chart__target {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 24px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: #55d6be;
+  box-shadow: 0 0 12px rgba(85, 214, 190, 0.35);
+}
+
+.axis-chart__row--brake .axis-chart__current {
+  background: linear-gradient(90deg, #eaf0f8, #a7b5c7);
+}
+
+.axis-chart__row--steering .axis-chart__current {
+  background: linear-gradient(90deg, #79d7ff, #5aa7ff);
+}
+
+.axis-chart__row--throttle .axis-chart__current {
+  background: linear-gradient(90deg, #8df3a7, #3ddc84);
+}
+
+.challenge-timeline {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.challenge-timeline__phase {
+  flex: 1 1 0;
+  min-width: 100px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #1f2c3f;
+  background: #111821;
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.challenge-timeline__phase--active {
+  border-color: #7bb8ff;
+  color: #e6eef8;
+}
+
+.result-score {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.result-skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.skill-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #0f1319;
+  border: 1px solid #1f2c3f;
+  color: #c9d6e4;
+  font-size: 12px;
+}
+
+.pilot-card {
+  margin-bottom: 0;
+}
+
+.pilot-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.pilot-card__score {
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skill-item {
+  padding: 14px;
+  border-radius: 14px;
+  background: #111821;
+  border: 1px solid #1f2c3f;
+}
+
+.skill-item__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.skill-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #0f1319;
+  border: 1px solid #1f2c3f;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.skill-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7bb8ff, #55d6be);
+  border-radius: inherit;
 }
 
 .legend-item {
@@ -214,7 +595,7 @@ select {
 }
 
 .challenge-visualizer {
-  min-height: 240px;
+  min-height: 280px;
   background: #111821;
   border: 1px solid #1f2c3f;
   border-radius: 18px;
@@ -262,6 +643,17 @@ select {
 @media (max-width: 720px) {
   .button-row,
   .challenge-row {
+    flex-direction: column;
+  }
+
+  .challenge-grid,
+  .skill-grid,
+  .challenge-kpis,
+  .challenge-telemetry {
+    grid-template-columns: 1fr;
+  }
+
+  .challenge-toolbar {
     flex-direction: column;
   }
 
