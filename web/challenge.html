@@ -27,6 +27,18 @@
           <p id="current-value">0%</p>
         </div>
       </div>
+      <div class="challenge-legend">
+        <div class="legend-item legend-item--brake">
+          <span class="legend-swatch legend-swatch--brake"></span>
+          <span>Freio</span>
+          <strong id="challenge-brake-value">0%</strong>
+        </div>
+        <div class="legend-item legend-item--steering">
+          <span class="legend-swatch legend-swatch--steering"></span>
+          <span>Direção</span>
+          <strong id="challenge-steering-value">0%</strong>
+        </div>
+      </div>
       <div class="challenge-visualizer" id="visualizer"></div>
       <div class="challenge-status">
         <p id="status-text">Aguardando dispositivo HID.</p>
@@ -41,6 +53,7 @@
   <footer class="site-footer">
     <a class="button" href="index.html">Voltar</a>
     <a class="button" href="settings.html">Configurações</a>
+    <p class="site-version">Versão <span data-version-label></span></p>
   </footer>
 
   <script src="app.js"></script>

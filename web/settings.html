@@ -29,6 +29,15 @@
             <span>Eixo do freio</span>
             <select id="brake-axis"></select>
           </label>
+          <div class="axis-meter axis-meter--brake">
+            <div class="axis-meter__header">
+              <span>Leitura do eixo</span>
+              <strong id="brake-axis-value">0%</strong>
+            </div>
+            <div class="axis-meter__track" aria-hidden="true">
+              <div id="brake-axis-fill" class="axis-meter__fill"></div>
+            </div>
+          </div>
         </div>
 
         <div class="device-panel">
@@ -43,6 +52,15 @@
             <span>Eixo da direção</span>
             <select id="steering-axis"></select>
           </label>
+          <div class="axis-meter axis-meter--steering">
+            <div class="axis-meter__header">
+              <span>Leitura do eixo</span>
+              <strong id="steering-axis-value">0%</strong>
+            </div>
+            <div class="axis-meter__track" aria-hidden="true">
+              <div id="steering-axis-fill" class="axis-meter__fill"></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -70,6 +88,7 @@
   <footer class="site-footer">
     <a class="button" href="index.html">Voltar</a>
     <a class="button" href="challenge.html">Ir para desafio</a>
+    <p class="site-version">Versão <span data-version-label></span></p>
   </footer>
 
   <script src="app.js"></script>

@@ -33,3 +33,8 @@ O fluxo de deploy para GitHub Pages está em [`.github/workflows/web-pages.yml`]
 ## Observação
 
 A versão do repositório agora é somente web. O foco é o uso no navegador com WebHID.
+
+## Versionamento
+
+- O label visível no rodapé de todas as páginas é controlado por `APP_VERSION` em [`web/app.js`](web/app.js).
+- Sempre que qualquer alteração for feita neste repositório, incremente esse label antes de finalizar a mudança.

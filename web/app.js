@@ -9,6 +9,8 @@ const initState = () => ({
   selectedBrakeAxisIndex: 0,
   selectedSteeringDeviceId: null,
   selectedSteeringAxisIndex: 0,
+  currentBrakeValue: 0,
+  currentSteeringValue: 0,
   currentValue: 0,
   config: {
     target: 50,
@@ -61,6 +63,8 @@ const activeDevices = new Map();
 
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
+// Bump this label on every repo change so the footer always reflects the latest build.
+const APP_VERSION = 'v0.2.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
@@ -139,6 +143,11 @@ const getSelectedRoleValue = (role) => {
 
   return getDeviceValue(selection.deviceId, selection.axisIndex);
 };
+const updateVersionLabels = () => {
+  document.querySelectorAll('[data-version-label]').forEach((node) => {
+    node.textContent = APP_VERSION;
+  });
+};
 
 const mergeAuthorizedDevices = (devices) => {
   const byId = new Map(state.devices.map((device) => [device.deviceId, device]));
@@ -170,12 +179,48 @@ const renderSelectedDeviceSummary = () => {
   }
 };
 
-const refreshSelectedBrakeValue = () => {
-  const value = getSelectedRoleValue('brake');
-  state.currentValue = value ?? 0;
-  const currentText = document.getElementById('current-value');
-  if (currentText) {
-    currentText.textContent = `${state.currentValue}%`;
+const refreshLiveReadouts = () => {
+  const brakeValue = getSelectedRoleValue('brake') ?? 0;
+  const steeringValue = getSelectedRoleValue('steering') ?? 0;
+
+  state.currentBrakeValue = brakeValue;
+  state.currentSteeringValue = steeringValue;
+  state.currentValue = brakeValue;
+
+  const brakeText = document.getElementById('current-value');
+  if (brakeText) {
+    brakeText.textContent = `${brakeValue}%`;
+  }
+
+  const updateMeter = (fillId, valueId, value) => {
+    const fill = document.getElementById(fillId);
+    if (fill) {
+      fill.style.width = `${value}%`;
+      fill.setAttribute('aria-valuenow', String(value));
+    }
+
+    const label = document.getElementById(valueId);
+    if (label) {
+      label.textContent = `${value}%`;
+    }
+  };
+
+  updateMeter('brake-axis-fill', 'brake-axis-value', brakeValue);
+  updateMeter('steering-axis-fill', 'steering-axis-value', steeringValue);
+
+  const challengeBrakeValue = document.getElementById('challenge-brake-value');
+  if (challengeBrakeValue) {
+    challengeBrakeValue.textContent = `${brakeValue}%`;
+  }
+
+  const challengeSteeringValue = document.getElementById('challenge-steering-value');
+  if (challengeSteeringValue) {
+    challengeSteeringValue.textContent = `${steeringValue}%`;
+  }
+
+  const visualizer = document.getElementById('visualizer');
+  if (visualizer) {
+    drawVisualizer();
   }
 };
 
@@ -196,7 +241,7 @@ const setSelectedDeviceForRole = (role, deviceId) => {
 
   renderSelectedDeviceSummary();
   updateDeviceSelectors();
-  refreshSelectedBrakeValue();
+  refreshLiveReadouts();
   updateConfig();
 };
 
@@ -204,7 +249,7 @@ const setSelectedAxisForRole = (role, axisIndex) => {
   const normalizedAxisIndex = Math.max(0, Number(axisIndex) || 0);
   setRoleAxisIndex(role, normalizedAxisIndex);
   renderSelectedDeviceSummary();
-  refreshSelectedBrakeValue();
+  refreshLiveReadouts();
   updateConfig();
 };
 
@@ -329,10 +374,7 @@ const onInputReport = (event) => {
     state.currentValue = normalizeReportValue(event.data, state.selectedBrakeAxisIndex);
   }
 
-  const currentText = document.getElementById('current-value');
-  if (currentText && deviceId === state.selectedBrakeDeviceId) {
-    currentText.textContent = `${state.currentValue}%`;
-  }
+  refreshLiveReadouts();
 };
 
 const refreshAuthorizedDevices = async () => {
@@ -498,46 +540,44 @@ const drawVisualizer = () => {
   const width = visualizer.clientWidth;
   const height = visualizer.clientHeight;
   const target = state.config.target;
-  const current = state.currentValue;
+  const brakeCurrent = state.currentBrakeValue ?? 0;
+  const steeringCurrent = state.currentSteeringValue ?? 0;
+
+  const appendLine = (className, position, orientation) => {
+    const line = document.createElement('div');
+    line.className = className;
+
+    if (orientation === 'horizontal') {
+      line.style.left = '0';
+      line.style.top = `${position}px`;
+      line.style.width = '100%';
+      line.style.height = '4px';
+    } else {
+      line.style.left = `${position}px`;
+      line.style.top = '0';
+      line.style.width = '4px';
+      line.style.height = '100%';
+    }
+
+    visualizer.appendChild(line);
+  };
 
   if (state.config.displayMode === 'horizontal') {
     const targetX = (target / 100) * width;
-    const currentX = (current / 100) * width;
+    const brakeX = (brakeCurrent / 100) * width;
+    const steeringX = (steeringCurrent / 100) * width;
 
-    const targetLine = document.createElement('div');
-    targetLine.className = 'target-line';
-    targetLine.style.left = `${targetX}px`;
-    targetLine.style.top = '0';
-    targetLine.style.width = '4px';
-    targetLine.style.height = '100%';
-    visualizer.appendChild(targetLine);
-
-    const currentLine = document.createElement('div');
-    currentLine.className = 'visual-line';
-    currentLine.style.left = `${currentX}px`;
-    currentLine.style.top = '0';
-    currentLine.style.width = '4px';
-    currentLine.style.height = '100%';
-    visualizer.appendChild(currentLine);
+    appendLine('target-line', targetX, 'vertical');
+    appendLine('visual-line visual-line--brake', brakeX, 'vertical');
+    appendLine('visual-line visual-line--steering', steeringX, 'vertical');
   } else {
     const targetY = height - (target / 100) * height;
-    const currentY = height - (current / 100) * height;
+    const brakeY = height - (brakeCurrent / 100) * height;
+    const steeringY = height - (steeringCurrent / 100) * height;
 
-    const targetLine = document.createElement('div');
-    targetLine.className = 'target-line';
-    targetLine.style.left = '0';
-    targetLine.style.top = `${targetY}px`;
-    targetLine.style.width = '100%';
-    targetLine.style.height = '4px';
-    visualizer.appendChild(targetLine);
-
-    const currentLine = document.createElement('div');
-    currentLine.className = 'visual-line';
-    currentLine.style.left = '0';
-    currentLine.style.top = `${currentY}px`;
-    currentLine.style.width = '100%';
-    currentLine.style.height = '4px';
-    visualizer.appendChild(currentLine);
+    appendLine('target-line', targetY, 'horizontal');
+    appendLine('visual-line visual-line--brake', brakeY, 'horizontal');
+    appendLine('visual-line visual-line--steering', steeringY, 'horizontal');
   }
 };
 
@@ -552,7 +592,6 @@ const renderChallenge = () => {
 
   targetText.textContent = `${state.config.target}%`;
   timeText.textContent = `${state.config.duration}s`;
-  currentText.textContent = `${state.currentValue}%`;
   statusText.textContent = 'Aguardando ação.';
 
   let elapsed = 0;
@@ -560,8 +599,7 @@ const renderChallenge = () => {
   const samples = [];
 
   const refresh = () => {
-    currentText.textContent = `${state.currentValue}%`;
-    drawVisualizer();
+    refreshLiveReadouts();
   };
 
   const stopChallenge = () => {
@@ -622,12 +660,13 @@ const initPage = async () => {
   if (navigator.hid) {
     await refreshAuthorizedDevices();
     await setupHIDListeners();
-    refreshSelectedBrakeValue();
+    refreshLiveReadouts();
   }
 
   if (page === 'settings') {
     bindSettings();
     renderSelectedDeviceSummary();
+    refreshLiveReadouts();
   }
 
   if (page === 'results') {
@@ -636,7 +675,10 @@ const initPage = async () => {
 
   if (page === 'challenge') {
     renderChallenge();
+    refreshLiveReadouts();
   }
+
+  updateVersionLabels();
 };
 
 window.addEventListener('DOMContentLoaded', initPage);
