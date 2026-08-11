@@ -1,34 +1,35 @@
 # Brake Trainer Pro
 
-Treinador local de frenagem para sim racing com suporte a HID/DirectInput e uma versão web protótipo.
+Treinador web de frenagem para sim racing, feito para Chrome e Edge com WebHID e armazenamento local.
 
 - leitura de brake axis e steering wheel angle
 - modos de treino para memória muscular, modulação e trail braking
-- persistência em SQLite para a versão desktop
-- protótipo web para Chrome/Edge usando WebHID e localStorage
-- interface moderna em PyQt6 para desktop
+- persistência em `localStorage`
+- interface web em HTML/CSS/JavaScript
 
-## Execução
+## Execução local
 
-### Desktop
+Sirva a pasta raiz com um servidor local:
+
 ```bash
-python -m brake_trainer_pro
+python3 -m http.server 8000
 ```
 
-### Web
-Abra `web/index.html` em um servidor local com HTTPS/localhost ou publique em GitHub Pages.
+Depois abra:
 
-## Build Windows 11
+```text
+http://localhost:8000/web/index.html
+```
 
-Veja [docs/windows-build.md](docs/windows-build.md) para o fluxo completo de empacotamento com PyInstaller e Inno Setup.
+## Publicação
+
+O fluxo de deploy para GitHub Pages está em [`.github/workflows/web-pages.yml`](.github/workflows/web-pages.yml).
 
 ## Estrutura
 
-- `src/brake_trainer_pro/`
-- `tests/`
-- `web/` para o protótipo do Brake Trainer Pro em HTML/CSS/JS
-- `build/` para empacotamento com PyInstaller
+- `web/` para a aplicação web
+- `.github/workflows/` para o deploy automatizado
 
 ## Observação
 
-A versão principal da aplicação segue como desktop PyQt6. O diretório `web/` contém um protótipo estático para Chrome/Edge com WebHID, persistindo desafios no localStorage e publicável via GitHub Pages.
+A versão do repositório agora é somente web. O foco é o uso no navegador com WebHID.
