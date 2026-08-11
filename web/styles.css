@@ -310,6 +310,10 @@ select {
   margin-bottom: 16px;
 }
 
+.challenge-telemetry--hidden {
+  display: none;
+}
+
 .telemetry-card {
   padding: 14px;
   border-radius: 14px;
@@ -375,6 +379,11 @@ select {
 
 .summary-box strong {
   font-size: 18px;
+}
+
+.summary-box--countdown strong {
+  font-size: 30px;
+  color: #55d6be;
 }
 
 .challenge-primary-reading {
@@ -601,6 +610,261 @@ select {
   border-radius: 18px;
   margin: 20px 0;
   position: relative;
+  overflow: hidden;
+}
+
+.challenge-visualizer--brake-precision,
+.challenge-visualizer--trail-graph,
+.challenge-visualizer--sync {
+  padding: 18px;
+}
+
+.precision-panel,
+.trail-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.precision-panel__header,
+.trail-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.precision-panel__score span,
+.trail-panel__score span {
+  display: block;
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.precision-panel__score strong,
+.trail-panel__score strong {
+  font-size: 28px;
+}
+
+.precision-panel__content {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(140px, 180px);
+  gap: 20px;
+  align-items: center;
+}
+
+.precision-meter {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.precision-meter__current {
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.precision-meter__track {
+  position: relative;
+  width: 100%;
+  max-width: 160px;
+  height: 320px;
+  border-radius: 18px;
+  border: 1px solid #2d5a45;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.06)),
+    #0f1319;
+  overflow: hidden;
+}
+
+.precision-meter__grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to bottom, rgba(149, 174, 196, 0.12) 1px, transparent 1px);
+  background-size: 100% 25%;
+  opacity: 0.5;
+}
+
+.precision-meter__zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(61, 220, 132, 0.25);
+  border-top: 1px solid rgba(61, 220, 132, 0.65);
+  border-bottom: 1px solid rgba(61, 220, 132, 0.65);
+}
+
+.precision-meter__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(141, 243, 167, 0.95), rgba(61, 220, 132, 0.7));
+  box-shadow: 0 0 20px rgba(61, 220, 132, 0.25);
+}
+
+.precision-meter__target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  transform: translateY(1px);
+  background: #f5faf8;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+}
+
+.precision-meter__footer {
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.precision-ring {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.precision-ring > span {
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.precision-ring__circle {
+  --progress: 0;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: conic-gradient(#3ddc84 calc(var(--progress) * 1turn), #1a202b 0);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.precision-ring__circle::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: #111821;
+  border: 1px solid #22304a;
+}
+
+.precision-ring__circle strong {
+  position: relative;
+  z-index: 1;
+  font-size: 30px;
+}
+
+.precision-ring small {
+  color: #96a5ba;
+}
+
+.precision-panel__status {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #22304a;
+  background: #111821;
+  color: #c9d6e4;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.precision-panel__status--good {
+  border-color: rgba(61, 220, 132, 0.65);
+  color: #8df3a7;
+  box-shadow: 0 0 0 1px rgba(61, 220, 132, 0.12) inset;
+}
+
+.trail-chart {
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid #1f2c3f;
+  background: #0f1319;
+}
+
+.trail-chart__background {
+  fill: #0f1319;
+}
+
+.trail-chart__grid-line {
+  stroke: #22304a;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.trail-chart__tick {
+  fill: #96a5ba;
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.trail-chart__ideal {
+  fill: none;
+  stroke: #e0ab4d;
+  stroke-width: 4;
+  stroke-dasharray: 12 10;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
+.trail-chart__actual {
+  fill: none;
+  stroke: #f3f7fb;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 12px rgba(243, 247, 251, 0.16));
+}
+
+.trail-chart__cursor {
+  stroke: #ff6b6b;
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  opacity: 0.9;
+}
+
+.trail-panel__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #96a5ba;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.trail-panel__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trail-panel__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.trail-panel__swatch--ideal {
+  background: #e0ab4d;
+}
+
+.trail-panel__swatch--actual {
+  background: #f3f7fb;
+}
+
+.trail-panel__swatch--cursor {
+  background: #ff6b6b;
 }
 
 .challenge-visualizer .visual-line,

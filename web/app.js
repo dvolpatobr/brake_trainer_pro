@@ -76,13 +76,14 @@ const state = getState();
 const activeDevices = new Map();
 const runtime = {
   activeChallenge: null,
+  pendingChallenge: null,
   timerId: null,
 };
 
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.4.0';
+const APP_VERSION = 'v0.5.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
@@ -209,6 +210,13 @@ const getSelectedRoleValue = (role) => {
   return getDeviceValue(selection.deviceId, selection.axisIndex);
 };
 const getSelectedRoleValueOrZero = (role) => getSelectedRoleValue(role) ?? 0;
+const getCurrentChallengeFrame = () => runtime.activeChallenge?.currentFrame || runtime.pendingChallenge?.previewFrame || null;
+const getCurrentChallengeDefinition = () => runtime.activeChallenge?.definition
+  || runtime.pendingChallenge?.definition
+  || getChallengeDefinition(state.ui.selectedChallengeType);
+const getChallengeVisualizationMode = (definition) => definition.visualization?.mode || 'default';
+const getChallengeSettingsSummary = (definition) => definition.settings || [];
+const formatCountdownSeconds = (milliseconds) => `${Math.max(0, milliseconds) / 1000 >= 10 ? Math.ceil(milliseconds / 1000) : (Math.max(0, milliseconds) / 1000).toFixed(1)}s`;
 const updateVersionLabels = () => {
   document.querySelectorAll('[data-version-label]').forEach((node) => {
     node.textContent = APP_VERSION;
@@ -269,7 +277,7 @@ const refreshLiveReadouts = () => {
       challengeValue.textContent = `${value}%`;
     }
 
-    const targetValue = runtime.activeChallenge?.currentFrame?.targets?.[role];
+    const targetValue = getCurrentChallengeFrame()?.targets?.[role];
     const challengeTarget = document.getElementById(roleDef.challengeTargetId);
     if (challengeTarget) {
       challengeTarget.textContent = `Target ${Math.round(Number.isFinite(targetValue) ? targetValue : value)}%`;
@@ -526,36 +534,9 @@ const bindSettings = () => {
   bindDeviceButton(steeringButton, 'steering');
   bindDeviceButton(throttleButton, 'throttle');
 
-  const targetInput = document.getElementById('target-value');
-  const durationInput = document.getElementById('challenge-duration');
-  const displayInput = document.getElementById('display-mode');
   const brakeSelect = document.getElementById('brake-device');
   const steeringSelect = document.getElementById('steering-device');
   const throttleSelect = document.getElementById('throttle-device');
-
-  if (targetInput) {
-    targetInput.value = state.config.target;
-    targetInput.addEventListener('input', (event) => {
-      state.config.target = Number(event.target.value);
-      updateConfig();
-    });
-  }
-
-  if (durationInput) {
-    durationInput.value = state.config.duration;
-    durationInput.addEventListener('input', (event) => {
-      state.config.duration = Number(event.target.value);
-      updateConfig();
-    });
-  }
-
-  if (displayInput) {
-    displayInput.value = state.config.displayMode;
-    displayInput.addEventListener('input', (event) => {
-      state.config.displayMode = event.target.value;
-      updateConfig();
-    });
-  }
 
   if (brakeSelect) {
     brakeSelect.addEventListener('change', (event) => {
@@ -733,8 +714,14 @@ const CHALLENGE_LIBRARY = {
     id: 'brake-precision',
     title: 'Brake Precision Challenge',
     shortTitle: 'Brake Precision',
-    description: 'O app sorteia alvos de freio e você precisa segurar cada valor com estabilidade por 2 segundos.',
+    description: 'O app sorteia alvos de freio e você precisa segurar cada valor com estabilidade, com a troca indicada por um contador visual.',
     objective: 'Memória muscular do pé, precisão de frenagem e consistência em alvos aleatórios.',
+    visualization: { mode: 'brake-precision' },
+    settings: [
+      { label: 'Passos', value: '3' },
+      { label: 'Tempo por passo', value: '3s' },
+      { label: 'Tolerância', value: '±3%' },
+    ],
     rules: [
       'Segure o brake dentro da janela de tolerância por 2 segundos.',
       'Cada rodada traz um novo alvo aleatório.',
@@ -743,11 +730,11 @@ const CHALLENGE_LIBRARY = {
     requiredRoles: ['brake'],
     buildPlan: () => {
       const rng = createSeededRandom(Date.now());
-      const targets = Array.from({ length: 5 }, () => randomInt(rng, 35, 92));
+      const targets = Array.from({ length: 3 }, () => randomInt(rng, 35, 92));
       return buildPhases(targets.map((target, index) => ({
-        name: `Rodada ${index + 1}`,
+        name: `Step ${index + 1}`,
         label: `Brake Target: ${target}%`,
-        durationMs: 2000,
+        durationMs: 3000,
         targets: {
           brake: [target, target],
           steering: [0, 0],
@@ -783,7 +770,7 @@ const CHALLENGE_LIBRARY = {
         challengeType: 'brake-precision',
         title: 'Brake Precision Challenge',
         score: overall,
-        summary: `Trail consistente nos alvos de brake. Score final ${overall}/100.`,
+        summary: `Precisão consistente nos alvos de brake. Score final ${overall}/100.`,
         completedAt: new Date().toISOString(),
         durationMs: plan.totalDurationMs,
         skillScores: {
@@ -807,6 +794,12 @@ const CHALLENGE_LIBRARY = {
     shortTitle: 'Trail Braking',
     description: 'Você enfrenta uma curva simulada onde brake cai enquanto steering sobe, exigindo soltura progressiva e coordenação fina.',
     objective: 'Desenvolver trail braking suave, controlar a transição brake → steering e manter repetibilidade de curva.',
+    visualization: { mode: 'trail-graph' },
+    settings: [
+      { label: 'Repetições', value: '2' },
+      { label: 'Gráfico', value: 'linha ideal + real' },
+      { label: 'Captura', value: 'cursor vertical' },
+    ],
     rules: [
       'Reduza o brake aos poucos durante a entrada da curva.',
       'A steering precisa crescer de forma progressiva.',
@@ -946,6 +939,12 @@ const CHALLENGE_LIBRARY = {
     shortTitle: 'Input Sync',
     description: 'O sistema analisa brake, steering e throttle ao mesmo tempo para validar a sequência correta de entrada e saída de curva.',
     objective: 'Executar a sequência brake → steering → release brake → throttle → full throttle sem sobreposições desnecessárias.',
+    visualization: { mode: 'sync-dashboard' },
+    settings: [
+      { label: 'Eixos', value: '3' },
+      { label: 'Sequência', value: 'Brake → Steering → Throttle' },
+      { label: 'Medição', value: '0–100' },
+    ],
     rules: [
       'Brake precisa cair antes da saída completa da curva.',
       'Steering deve subir enquanto o brake é liberado.',
@@ -1087,6 +1086,13 @@ const getMissingRolesForChallenge = (challengeType) => {
 };
 
 const getChallengeStatusText = () => {
+  if (runtime.pendingChallenge) {
+    const remainingMs = Math.max(0, runtime.pendingChallenge.countdownEndsAt - Date.now());
+    return remainingMs > 0
+      ? `Começa em ${Math.ceil(remainingMs / 1000)}s`
+      : 'Preparando desafio...';
+  }
+
   if (!runtime.activeChallenge) {
     return 'Aguardando ação.';
   }
@@ -1098,6 +1104,47 @@ const getChallengeStatusText = () => {
 
   const remainingMs = Math.max(0, runtime.activeChallenge.plan.totalDurationMs - runtime.activeChallenge.elapsedMs);
   return `${frame.phase.name} | ${Math.ceil(remainingMs / 1000)}s restantes`;
+};
+
+const getChallengeTimerText = (challenge) => {
+  if (!challenge) {
+    return '0.0s';
+  }
+
+  if (runtime.pendingChallenge === challenge) {
+    return formatCountdownSeconds(Math.max(0, challenge.countdownEndsAt - Date.now()));
+  }
+
+  if (challenge.definition.id === 'brake-precision') {
+    const frame = challenge.currentFrame || challenge.previewFrame;
+    const remainingMs = frame ? Math.max(0, frame.endMs - (challenge.elapsedMs || 0)) : 0;
+    return formatCountdownSeconds(remainingMs);
+  }
+
+  const remainingMs = Math.max(0, challenge.plan.totalDurationMs - challenge.elapsedMs);
+  return `${Math.ceil(remainingMs / 1000)}s`;
+};
+
+const clearChallengeTimer = () => {
+  if (runtime.timerId) {
+    clearInterval(runtime.timerId);
+    runtime.timerId = null;
+  }
+};
+
+const startActiveChallenge = (pendingChallenge) => {
+  runtime.pendingChallenge = null;
+  runtime.activeChallenge = {
+    definition: pendingChallenge.definition,
+    plan: pendingChallenge.plan,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    samples: [],
+    currentFrame: getFrameAt(pendingChallenge.plan, 0),
+    liveScore: 0,
+  };
+  renderChallengePage();
+  refreshLiveReadouts();
 };
 
 const renderChallengeSelector = () => {
@@ -1125,6 +1172,9 @@ const renderChallengeSelector = () => {
 
 const renderChallengePage = () => {
   const definition = getChallengeDefinition(state.ui.selectedChallengeType);
+  const challenge = runtime.activeChallenge || runtime.pendingChallenge;
+  const currentFrame = getCurrentChallengeFrame();
+  const presentationMode = getChallengeVisualizationMode(definition);
   const titleNode = document.getElementById('challenge-title');
   const descriptionNode = document.getElementById('challenge-description');
   const objectiveNode = document.getElementById('challenge-objective');
@@ -1138,6 +1188,8 @@ const renderChallengePage = () => {
   const challengeMeta = document.getElementById('challenge-meta');
   const summaryNode = document.getElementById('challenge-summary');
   const breakdownNode = document.getElementById('challenge-breakdown');
+  const telemetryNode = document.querySelector('.challenge-telemetry');
+  const primaryReading = document.getElementById('current-value');
 
   if (titleNode) titleNode.textContent = definition.title;
   if (descriptionNode) descriptionNode.textContent = definition.description;
@@ -1164,21 +1216,33 @@ const renderChallengePage = () => {
 
   if (challengeMeta) {
     const missingRoles = getMissingRolesForChallenge(definition.id);
-    challengeMeta.textContent = missingRoles.length
+    const settings = getChallengeSettingsSummary(definition);
+    const readiness = missingRoles.length
       ? `Requer: ${definition.requiredRoles.map((role) => ROLE_DEFS[role].label).join(', ')}`
       : `Pronto para rodar: ${definition.requiredRoles.map((role) => ROLE_DEFS[role].label).join(', ')}`;
+    challengeMeta.textContent = settings.length
+      ? `${readiness} • ${settings.map((item) => `${item.label}: ${item.value}`).join(' • ')}`
+      : readiness;
   }
 
   if (phaseNode) {
-    phaseNode.textContent = runtime.activeChallenge
-      ? runtime.activeChallenge.currentFrame?.phase.name || 'Preparando fase...'
-      : 'Sem desafio ativo';
+    if (runtime.pendingChallenge) {
+      phaseNode.textContent = 'Contagem regressiva';
+    } else if (runtime.activeChallenge) {
+      phaseNode.textContent = runtime.activeChallenge.currentFrame?.phase.name || 'Preparando fase...';
+    } else {
+      phaseNode.textContent = 'Sem desafio ativo';
+    }
   }
 
   if (timeNode) {
-    timeNode.textContent = runtime.activeChallenge
-      ? `${Math.ceil(Math.max(0, runtime.activeChallenge.plan.totalDurationMs - runtime.activeChallenge.elapsedMs) / 1000)}s`
-      : '0s';
+    if (runtime.pendingChallenge) {
+      timeNode.textContent = getChallengeTimerText(runtime.pendingChallenge);
+    } else if (runtime.activeChallenge) {
+      timeNode.textContent = getChallengeTimerText(runtime.activeChallenge);
+    } else {
+      timeNode.textContent = '0s';
+    }
   }
 
   if (scoreNode) {
@@ -1189,21 +1253,45 @@ const renderChallengePage = () => {
 
   if (statusNode) {
     const missingRoles = getMissingRolesForChallenge(definition.id);
-    statusNode.textContent = runtime.activeChallenge
-      ? getChallengeStatusText()
-      : missingRoles.length
-        ? `Selecione: ${missingRoles.map((role) => ROLE_DEFS[role].label.toLowerCase()).join(', ')}.`
-        : 'Pronto para iniciar.';
+    statusNode.textContent = runtime.pendingChallenge
+      ? `Começa em ${Math.max(1, Math.ceil((runtime.pendingChallenge.countdownEndsAt - Date.now()) / 1000))}s`
+      : runtime.activeChallenge
+        ? getChallengeStatusText()
+        : missingRoles.length
+          ? `Selecione: ${missingRoles.map((role) => ROLE_DEFS[role].label.toLowerCase()).join(', ')}.`
+          : 'Pronto para iniciar.';
   }
 
   if (startButton) {
-    startButton.disabled = Boolean(runtime.activeChallenge);
-    startButton.textContent = runtime.activeChallenge ? 'Desafio em andamento...' : 'Iniciar desafio';
+    startButton.disabled = Boolean(runtime.activeChallenge || runtime.pendingChallenge);
+    startButton.textContent = runtime.activeChallenge
+      ? 'Desafio em andamento...'
+      : runtime.pendingChallenge
+        ? 'Preparando...'
+        : 'Iniciar desafio';
   }
 
   if (summaryNode) {
-    summaryNode.innerHTML = runtime.activeChallenge
-      ? `
+    const settingsHtml = getChallengeSettingsSummary(definition).map((item) => `
+      <div class="summary-box">
+        <span>${item.label}</span>
+        <strong>${item.value}</strong>
+      </div>
+    `).join('');
+
+    if (runtime.pendingChallenge) {
+      summaryNode.innerHTML = `
+        <div class="summary-box summary-box--countdown">
+          <span>Começa em</span>
+          <strong>${Math.max(1, Math.ceil((runtime.pendingChallenge.countdownEndsAt - Date.now()) / 1000))}s</strong>
+        </div>
+        <div class="summary-box">
+          <span>Primeiro passo</span>
+          <strong>${runtime.pendingChallenge.previewFrame?.phase.name || 'Preparando...'}</strong>
+        </div>
+      `;
+    } else if (runtime.activeChallenge) {
+      summaryNode.innerHTML = `
         <div class="summary-box">
           <span>Score atual</span>
           <strong>${Math.round(runtime.activeChallenge.liveScore || 0)}/100</strong>
@@ -1212,25 +1300,54 @@ const renderChallengePage = () => {
           <span>Fase</span>
           <strong>${runtime.activeChallenge.currentFrame?.phase.name || '...'}</strong>
         </div>
-      `
-      : '<p>Escolha um desafio e conecte os eixos para começar.</p>';
+        <div class="summary-box">
+          <span>Tempo restante</span>
+          <strong>${getChallengeTimerText(runtime.activeChallenge)}</strong>
+        </div>
+      `;
+    } else {
+      summaryNode.innerHTML = `
+        <div class="summary-box">
+          <span>Status</span>
+          <strong>Pronto para iniciar</strong>
+        </div>
+        ${settingsHtml}
+      `;
+    }
   }
 
-  if (breakdownNode && !runtime.activeChallenge) {
+  if (breakdownNode && !runtime.activeChallenge && !runtime.pendingChallenge) {
     const lastResult = state.challenges[state.challenges.length - 1];
-    breakdownNode.innerHTML = lastResult
-      ? `
-        <div class="score-card">
-          <span class="section-eyebrow">Último resultado</span>
-          <strong>${lastResult.title}</strong>
-          <p>${lastResult.summary || ''}</p>
-        </div>
-      `
-      : '';
+    breakdownNode.innerHTML = `
+      <div class="score-card">
+        <span class="section-eyebrow">Ajustes deste desafio</span>
+        ${getChallengeSettingsSummary(definition).map((item) => `<p>${item.label}: ${item.value}</p>`).join('')}
+      </div>
+      ${lastResult
+        ? `
+          <div class="score-card">
+            <span class="section-eyebrow">Último resultado</span>
+            <strong>${lastResult.title}</strong>
+            <p>${lastResult.summary || ''}</p>
+          </div>
+        `
+        : ''}
+    `;
+  }
+
+  if (breakdownNode && runtime.pendingChallenge) {
+    const targets = runtime.pendingChallenge.previewFrame?.targets || {};
+    breakdownNode.innerHTML = `
+      <div class="score-card">
+        <span class="section-eyebrow">Aguarde o início</span>
+        <p>Target brake: ${Math.round(targets.brake || 0)}%</p>
+        <p>Tempo até iniciar: ${Math.max(1, Math.ceil((runtime.pendingChallenge.countdownEndsAt - Date.now()) / 1000))}s</p>
+      </div>
+    `;
   }
 
   if (breakdownNode && runtime.activeChallenge) {
-    const targets = runtime.activeChallenge.currentFrame?.targets || {};
+    const targets = currentFrame?.targets || {};
     breakdownNode.innerHTML = `
       <div class="score-card">
         <span class="section-eyebrow">Targets da fase</span>
@@ -1243,6 +1360,14 @@ const renderChallengePage = () => {
         <p>${Math.round((runtime.activeChallenge.currentFrame?.progress || 0) * 100)}%</p>
       </div>
     `;
+  }
+
+  if (telemetryNode) {
+    telemetryNode.classList.toggle('challenge-telemetry--hidden', presentationMode !== 'sync-dashboard');
+  }
+
+  if (primaryReading) {
+    primaryReading.textContent = `${getSelectedRoleValueOrZero('brake')}%`;
   }
 
   renderChallengeSelector();
@@ -1342,17 +1467,145 @@ const renderResults = () => {
   renderPilotCard();
 };
 
-const drawVisualizer = () => {
-  const visualizer = document.getElementById('visualizer');
-  if (!visualizer) return;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const createSvgElement = (tagName) => document.createElementNS(SVG_NS, tagName);
+const buildSeriesPoints = (series, totalDurationMs, plotWidth, plotHeight, padding) => series
+  .map((entry) => {
+    const x = padding + ((entry.elapsedMs / Math.max(1, totalDurationMs)) * plotWidth);
+    const y = padding + (plotHeight - ((clamp(entry.value, 0, 100) / 100) * plotHeight));
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  })
+  .join(' ');
+const buildBrakeSeries = (plan, totalDurationMs, stepMs = 100) => {
+  const series = [];
+  for (let elapsedMs = 0; elapsedMs <= totalDurationMs; elapsedMs += stepMs) {
+    const frame = getFrameAt(plan, elapsedMs);
+    series.push({
+      elapsedMs,
+      value: frame.targets.brake || 0,
+    });
+  }
+  return series;
+};
+const buildActualBrakeSeries = (samples) => samples.map((sample) => ({
+  elapsedMs: sample.elapsedMs,
+  value: sample.values.brake,
+}));
+const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
+  const frame = challenge?.currentFrame || challenge?.previewFrame || null;
+  const currentValue = getSelectedRoleValueOrZero('brake');
+  const targetValue = Math.round(frame?.targets?.brake?.[0] ?? frame?.targets?.brake ?? currentValue);
+  const tolerance = 3;
+  const stepIndex = challenge?.plan?.phases && frame?.phase
+    ? Math.max(0, challenge.plan.phases.indexOf(frame.phase))
+    : 0;
+  const stepTotal = challenge?.plan?.phases?.length || definition.settings?.find((item) => item.label === 'Passos')?.value || '3';
+  const stepDurationMs = frame?.durationMs || 3000;
+  const remainingMs = runtime.pendingChallenge
+    ? Math.max(0, challenge.countdownEndsAt - Date.now())
+    : Math.max(0, stepDurationMs - ((challenge?.elapsedMs || 0) - (frame?.startMs || 0)));
+  const filledPercent = frame ? clamp(((stepDurationMs - remainingMs) / stepDurationMs) * 100) : 0;
+  const withinTolerance = Math.abs(currentValue - targetValue) <= tolerance;
 
-  const challenge = runtime.activeChallenge;
-  const frame = challenge?.currentFrame;
+  visualizer.innerHTML = `
+    <div class="precision-panel precision-panel--brake">
+      <div class="precision-panel__header">
+        <div>
+          <p class="section-eyebrow">STEP ${stepIndex + 1} DE ${stepTotal}</p>
+          <h3>${frame?.phase?.name || definition.title}</h3>
+        </div>
+        <div class="precision-panel__score">
+          <span>Acurácia</span>
+          <strong>${runtime.activeChallenge?.liveScore != null ? `${Math.round(runtime.activeChallenge.liveScore)}%` : '--'}</strong>
+        </div>
+      </div>
+      <div class="precision-panel__content">
+        <div class="precision-meter">
+          <div class="precision-meter__current">${currentValue}%</div>
+          <div class="precision-meter__track">
+            <div class="precision-meter__grid"></div>
+            <div class="precision-meter__zone" style="bottom: ${clamp(targetValue - tolerance, 0, 100)}%; height: ${clamp(tolerance * 2, 4, 24)}%;"></div>
+            <div class="precision-meter__fill" style="height: ${currentValue}%;"></div>
+            <div class="precision-meter__target" style="bottom: ${targetValue}%;"></div>
+          </div>
+          <div class="precision-meter__footer">ALVO: ${targetValue}% ±${tolerance}%</div>
+        </div>
+        <div class="precision-ring">
+          <span>TEMPO</span>
+          <div class="precision-ring__circle" style="--progress: ${frame ? clamp(1 - (remainingMs / Math.max(1, stepDurationMs)), 0, 1) : 0};">
+            <strong>${formatCountdownSeconds(remainingMs)}</strong>
+          </div>
+          <small>${runtime.pendingChallenge ? '3s total' : `${Math.round(stepDurationMs / 1000)}s total`}</small>
+        </div>
+      </div>
+      <div class="precision-panel__status ${withinTolerance ? 'precision-panel__status--good' : ''}">
+        ${runtime.pendingChallenge
+          ? `Vai começar em ${Math.max(1, Math.ceil(remainingMs / 1000))}s`
+          : withinTolerance
+            ? 'NA ZONA - MANTENHA!'
+            : 'Ajuste fino da pressão'}
+      </div>
+    </div>
+  `;
+};
+const renderTrailBrakingVisualizer = (visualizer, challenge, definition) => {
+  const currentFrame = challenge?.currentFrame || challenge?.previewFrame || null;
+  const totalDurationMs = challenge?.plan?.totalDurationMs || 1;
+  const width = 960;
+  const height = 320;
+  const padding = 28;
+  const plotWidth = width - (padding * 2);
+  const plotHeight = height - (padding * 2);
+  const actualSeries = buildActualBrakeSeries(challenge?.samples || []);
+  const idealSeries = challenge?.plan ? buildBrakeSeries(challenge.plan, totalDurationMs) : [];
+  const actualPoints = buildSeriesPoints(actualSeries, totalDurationMs, plotWidth, plotHeight, padding);
+  const idealPoints = buildSeriesPoints(idealSeries, totalDurationMs, plotWidth, plotHeight, padding);
+  const cursorX = padding + (clamp((challenge?.elapsedMs || 0) / Math.max(1, totalDurationMs), 0, 1) * plotWidth);
+  const gridLines = [0, 25, 50, 75, 100].map((value) => {
+    const y = padding + (plotHeight - ((value / 100) * plotHeight));
+    return `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" class="trail-chart__grid-line" />`;
+  }).join('');
+  const tickLabels = Array.from({ length: Math.floor(totalDurationMs / 1000) + 1 }, (_, index) => {
+    const x = padding + ((index / Math.max(1, totalDurationMs / 1000)) * plotWidth);
+    return `<text x="${x}" y="${height - 8}" class="trail-chart__tick">${index}s</text>`;
+  }).join('');
+  const score = runtime.activeChallenge?.liveScore != null ? Math.round(runtime.activeChallenge.liveScore) : '--';
+
+  visualizer.innerHTML = `
+    <div class="trail-panel">
+      <div class="trail-panel__header">
+        <div>
+          <p class="section-eyebrow">Trail Braking</p>
+          <h3>${currentFrame?.phase?.name || definition.title}</h3>
+        </div>
+        <div class="trail-panel__score">
+          <span>ACURÁCIA</span>
+          <strong>${score}%</strong>
+        </div>
+      </div>
+      <svg class="trail-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de trail braking">
+        <rect x="0" y="0" width="${width}" height="${height}" class="trail-chart__background" />
+        ${gridLines}
+        ${tickLabels}
+        <line x1="${cursorX}" y1="${padding}" x2="${cursorX}" y2="${height - padding}" class="trail-chart__cursor" />
+        <polyline points="${idealPoints}" class="trail-chart__ideal" />
+        <polyline points="${actualPoints}" class="trail-chart__actual" />
+      </svg>
+      <div class="trail-panel__legend">
+        <span><i class="trail-panel__swatch trail-panel__swatch--ideal"></i>Linha ideal</span>
+        <span><i class="trail-panel__swatch trail-panel__swatch--actual"></i>Pressão atual</span>
+        <span><i class="trail-panel__swatch trail-panel__swatch--cursor"></i>Captura</span>
+      </div>
+    </div>
+  `;
+};
+const renderSyncVisualizer = (visualizer, challenge, definition) => {
   const values = getRoleValueMap();
+  const frame = challenge?.currentFrame || challenge?.previewFrame || null;
   const targets = frame?.targets || values;
 
   visualizer.innerHTML = '';
-  visualizer.className = 'challenge-visualizer';
+  visualizer.className = 'challenge-visualizer challenge-visualizer--sync';
 
   const chart = document.createElement('div');
   chart.className = 'axis-chart';
@@ -1397,12 +1650,32 @@ const drawVisualizer = () => {
     visualizer.appendChild(timeline);
   }
 };
+const drawVisualizer = () => {
+  const visualizer = document.getElementById('visualizer');
+  if (!visualizer) return;
+
+  const definition = getCurrentChallengeDefinition();
+  const challenge = runtime.activeChallenge || runtime.pendingChallenge;
+  const presentationMode = getChallengeVisualizationMode(definition);
+
+  visualizer.innerHTML = '';
+  visualizer.className = `challenge-visualizer challenge-visualizer--${presentationMode}`;
+
+  if (presentationMode === 'brake-precision') {
+    renderBrakePrecisionVisualizer(visualizer, challenge, definition);
+    return;
+  }
+
+  if (presentationMode === 'trail-graph') {
+    renderTrailBrakingVisualizer(visualizer, challenge, definition);
+    return;
+  }
+
+  renderSyncVisualizer(visualizer, challenge, definition);
+};
 
 const stopActiveChallenge = () => {
-  if (runtime.timerId) {
-    clearInterval(runtime.timerId);
-    runtime.timerId = null;
-  }
+  clearChallengeTimer();
 };
 
 const finalizeChallenge = () => {
@@ -1416,7 +1689,7 @@ const finalizeChallenge = () => {
     ...result,
     title: challenge.definition.title,
     duration: Math.round(challenge.plan.totalDurationMs / 1000),
-    target: state.config.target,
+    settings: challenge.definition.settings || [],
   });
   updateConfig();
   runtime.activeChallenge = null;
@@ -1425,6 +1698,19 @@ const finalizeChallenge = () => {
 };
 
 const runChallengeTick = () => {
+  if (runtime.pendingChallenge) {
+    const remainingMs = runtime.pendingChallenge.countdownEndsAt - Date.now();
+    if (remainingMs > 0) {
+      renderChallengePage();
+      refreshLiveReadouts();
+      return;
+    }
+
+    const pendingChallenge = runtime.pendingChallenge;
+    startActiveChallenge(pendingChallenge);
+    return;
+  }
+
   const challenge = runtime.activeChallenge;
   if (!challenge) return;
 
@@ -1474,17 +1760,17 @@ const startSelectedChallenge = () => {
   }
 
   stopActiveChallenge();
+  runtime.activeChallenge = null;
+  runtime.pendingChallenge = null;
   const plan = definition.buildPlan();
-  runtime.activeChallenge = {
+  runtime.pendingChallenge = {
     definition,
     plan,
-    startedAt: Date.now(),
-    elapsedMs: 0,
-    samples: [],
-    currentFrame: getFrameAt(plan, 0),
-    liveScore: 0,
+    previewFrame: getFrameAt(plan, 0),
+    countdownEndsAt: Date.now() + 3000,
   };
   renderChallengePage();
+  refreshLiveReadouts();
   runtime.timerId = setInterval(runChallengeTick, 100);
   runChallengeTick();
 };
