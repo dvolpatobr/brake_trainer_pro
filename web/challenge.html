@@ -40,6 +40,7 @@
             <p id="status-text">Aguardando dispositivo HID.</p>
           </div>
           <div id="challenge-summary" class="challenge-summary"></div>
+          <div id="challenge-settings" class="challenge-settings"></div>
         </aside>
 
         <section class="challenge-play">
@@ -86,6 +87,18 @@
       </div>
     </section>
   </main>
+
+  <div id="challenge-modal" class="challenge-modal challenge-modal--hidden" aria-hidden="true">
+    <div class="challenge-modal__backdrop"></div>
+    <div class="challenge-modal__card" role="dialog" aria-modal="true" aria-labelledby="challenge-modal-title">
+      <p class="section-eyebrow">Contagem regressiva</p>
+      <h3 id="challenge-modal-title">Prepare-se</h3>
+      <p id="challenge-modal-subtitle">Aguarde o início para começar a medição.</p>
+      <div class="challenge-modal__countdown">
+        <strong id="challenge-modal-countdown">3</strong>
+      </div>
+    </div>
+  </div>
 
   <footer class="site-footer">
     <a class="button" href="index.html">Voltar</a>

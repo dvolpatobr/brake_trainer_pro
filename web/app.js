@@ -20,6 +20,16 @@ const initState = () => ({
     duration: 10,
     displayMode: 'vertical',
   },
+  challengeSettings: {
+    brakePrecision: {
+      steps: 3,
+      delaySeconds: 3,
+      tolerance: 3,
+    },
+    trailBraking: {
+      mode: 'medium',
+    },
+  },
   challenges: [],
   ui: {
     selectedChallengeType: 'brake-precision',
@@ -46,6 +56,18 @@ const getState = () => {
       deviceValues: parsed.deviceValues || defaultState.deviceValues,
       deviceReports: parsed.deviceReports || defaultState.deviceReports,
       deviceAxisCounts: parsed.deviceAxisCounts || defaultState.deviceAxisCounts,
+      challengeSettings: {
+        ...defaultState.challengeSettings,
+        ...(parsed.challengeSettings || {}),
+        brakePrecision: {
+          ...defaultState.challengeSettings.brakePrecision,
+          ...(parsed.challengeSettings?.brakePrecision || {}),
+        },
+        trailBraking: {
+          ...defaultState.challengeSettings.trailBraking,
+          ...(parsed.challengeSettings?.trailBraking || {}),
+        },
+      },
       selectedThrottleDeviceId: parsed.selectedThrottleDeviceId || defaultState.selectedThrottleDeviceId,
       selectedThrottleAxisIndex: Number.isFinite(Number(parsed.selectedThrottleAxisIndex))
         ? Number(parsed.selectedThrottleAxisIndex)
@@ -77,13 +99,14 @@ const activeDevices = new Map();
 const runtime = {
   activeChallenge: null,
   pendingChallenge: null,
+  lastCompletedChallenge: null,
   timerId: null,
 };
 
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.5.0';
+const APP_VERSION = 'v0.12.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
@@ -210,12 +233,86 @@ const getSelectedRoleValue = (role) => {
   return getDeviceValue(selection.deviceId, selection.axisIndex);
 };
 const getSelectedRoleValueOrZero = (role) => getSelectedRoleValue(role) ?? 0;
+const getBrakePrecisionSettings = () => {
+  const stored = state.challengeSettings?.brakePrecision || {};
+  const steps = Math.max(1, Math.min(12, Math.round(Number(stored.steps) || 3)));
+  const delaySeconds = Math.max(1, Math.min(10, Number(stored.delaySeconds) || 3));
+  const tolerance = Math.max(1, Math.min(20, Math.round(Number(stored.tolerance) || 3)));
+
+  return {
+    steps,
+    delaySeconds,
+    delayMs: delaySeconds * 1000,
+    tolerance,
+  };
+};
+const updateBrakePrecisionSettings = (patch) => {
+  state.challengeSettings.brakePrecision = {
+    ...getBrakePrecisionSettings(),
+    ...patch,
+  };
+  updateConfig();
+};
+const TRAIL_MODES = {
+  easy: {
+    id: 'easy',
+    label: 'Fácil',
+    description: 'Curva previsível, cursor a 90% e 1 repetição.',
+    repetitions: 1,
+    speed: 0.9,
+    curve: 'suave',
+  },
+  medium: {
+    id: 'medium',
+    label: 'Médio',
+    description: 'Curva média, cursor a 120% e 2 repetições.',
+    repetitions: 2,
+    speed: 1.2,
+    curve: 'média',
+  },
+  hard: {
+    id: 'hard',
+    label: 'Difícil',
+    description: 'Curva técnica, cursor a 150% e 3 repetições.',
+    repetitions: 3,
+    speed: 1.5,
+    curve: 'técnica',
+  },
+};
+const getTrailBrakingSettings = () => {
+  const mode = state.challengeSettings?.trailBraking?.mode;
+  return TRAIL_MODES[mode] || TRAIL_MODES.medium;
+};
+const updateTrailBrakingSettings = (mode) => {
+  state.challengeSettings.trailBraking = { mode: TRAIL_MODES[mode] ? mode : 'medium' };
+  updateConfig();
+};
 const getCurrentChallengeFrame = () => runtime.activeChallenge?.currentFrame || runtime.pendingChallenge?.previewFrame || null;
 const getCurrentChallengeDefinition = () => runtime.activeChallenge?.definition
   || runtime.pendingChallenge?.definition
   || getChallengeDefinition(state.ui.selectedChallengeType);
 const getChallengeVisualizationMode = (definition) => definition.visualization?.mode || 'default';
-const getChallengeSettingsSummary = (definition) => definition.settings || [];
+const getChallengeSettingsSummary = (definition) => {
+  if (definition.id === 'brake-precision') {
+    const config = getBrakePrecisionSettings();
+    return [
+      { label: 'Passos', value: String(config.steps) },
+      { label: 'Tempo por atraso', value: `${config.delaySeconds}s` },
+      { label: 'Tolerância', value: `±${config.tolerance}%` },
+    ];
+  }
+
+  if (definition.id === 'trail-braking') {
+    const config = getTrailBrakingSettings();
+    return [
+      { label: 'Modo', value: config.label },
+      { label: 'Repetições', value: String(config.repetitions) },
+      { label: 'Velocidade', value: `${Math.round(config.speed * 100)}%` },
+    ];
+  }
+
+  return definition.settings || [];
+};
 const formatCountdownSeconds = (milliseconds) => `${Math.max(0, milliseconds) / 1000 >= 10 ? Math.ceil(milliseconds / 1000) : (Math.max(0, milliseconds) / 1000).toFixed(1)}s`;
 const updateVersionLabels = () => {
   document.querySelectorAll('[data-version-label]').forEach((node) => {
@@ -717,11 +814,6 @@ const CHALLENGE_LIBRARY = {
     description: 'O app sorteia alvos de freio e você precisa segurar cada valor com estabilidade, com a troca indicada por um contador visual.',
     objective: 'Memória muscular do pé, precisão de frenagem e consistência em alvos aleatórios.',
     visualization: { mode: 'brake-precision' },
-    settings: [
-      { label: 'Passos', value: '3' },
-      { label: 'Tempo por passo', value: '3s' },
-      { label: 'Tolerância', value: '±3%' },
-    ],
     rules: [
       'Segure o brake dentro da janela de tolerância por 2 segundos.',
       'Cada rodada traz um novo alvo aleatório.',
@@ -730,25 +822,30 @@ const CHALLENGE_LIBRARY = {
     requiredRoles: ['brake'],
     buildPlan: () => {
       const rng = createSeededRandom(Date.now());
-      const targets = Array.from({ length: 3 }, () => randomInt(rng, 35, 92));
-      return buildPhases(targets.map((target, index) => ({
+      const config = getBrakePrecisionSettings();
+      const targets = Array.from({ length: config.steps }, () => randomInt(rng, 35, 92));
+      return {
+        ...buildPhases(targets.map((target, index) => ({
         name: `Step ${index + 1}`,
         label: `Brake Target: ${target}%`,
-        durationMs: 3000,
+        durationMs: config.delayMs,
         targets: {
           brake: [target, target],
           steering: [0, 0],
           throttle: [0, 0],
         },
         target,
-      })));
+      }))),
+        settings: config,
+      };
     },
     evaluate: (samples, plan) => {
+      const config = plan.settings || getBrakePrecisionSettings();
       const phaseStats = plan.phases.map((phase) => {
         const phaseSamples = getSamplesForPhase(samples, phase);
         const target = phase.target || phase.targets.brake[0];
         const errors = phaseSamples.map((sample) => Math.abs(sample.values.brake - target));
-        const withinTolerance = phaseSamples.filter((sample) => Math.abs(sample.values.brake - target) <= 3).length;
+        const withinTolerance = phaseSamples.filter((sample) => Math.abs(sample.values.brake - target) <= config.tolerance).length;
         const series = getAxisSeries(phaseSamples, 'brake');
         return {
           target,
@@ -773,6 +870,7 @@ const CHALLENGE_LIBRARY = {
         summary: `Precisão consistente nos alvos de brake. Score final ${overall}/100.`,
         completedAt: new Date().toISOString(),
         durationMs: plan.totalDurationMs,
+        settings: config,
         skillScores: {
           brakePrecision: accuracy,
           brakeModulation,
@@ -796,7 +894,6 @@ const CHALLENGE_LIBRARY = {
     objective: 'Desenvolver trail braking suave, controlar a transição brake → steering e manter repetibilidade de curva.',
     visualization: { mode: 'trail-graph' },
     settings: [
-      { label: 'Repetições', value: '2' },
       { label: 'Gráfico', value: 'linha ideal + real' },
       { label: 'Captura', value: 'cursor vertical' },
     ],
@@ -808,19 +905,21 @@ const CHALLENGE_LIBRARY = {
     requiredRoles: ['brake', 'steering'],
     buildPlan: () => {
       const rng = createSeededRandom(Date.now());
+      const config = getTrailBrakingSettings();
       const scenarios = [
         { name: 'Curva média à direita', brakeStart: randomInt(rng, 85, 96), steeringPeak: randomInt(rng, 58, 72) },
         { name: 'Curva rápida à esquerda', brakeStart: randomInt(rng, 88, 98), steeringPeak: randomInt(rng, 48, 62) },
       ];
       const scenario = scenarios[randomInt(rng, 0, scenarios.length - 1)];
       const phases = [];
+      const duration = (milliseconds) => Math.round(milliseconds / config.speed);
 
-      for (let rep = 0; rep < 2; rep += 1) {
+      for (let rep = 0; rep < config.repetitions; rep += 1) {
         phases.push({
           name: `Entrada ${rep + 1}`,
           repIndex: rep,
           label: `${scenario.name} - entrada`,
-          durationMs: 1200,
+          durationMs: duration(config.id === 'easy' ? 1500 : 1200),
           targets: {
             brake: [scenario.brakeStart, scenario.brakeStart - 8],
             steering: [0, 12],
@@ -831,21 +930,34 @@ const CHALLENGE_LIBRARY = {
           name: `Transição ${rep + 1}`,
           repIndex: rep,
           label: `${scenario.name} - transição`,
-          durationMs: 1600,
+          durationMs: duration(config.id === 'easy' ? 2100 : config.id === 'hard' ? 1150 : 1600),
           targets: {
             brake: [scenario.brakeStart - 8, 12],
             steering: [12, scenario.steeringPeak],
             throttle: [0, 0],
           },
         });
+        if (config.id === 'hard') {
+          phases.push({
+            name: `Compressão ${rep + 1}`,
+            repIndex: rep,
+            label: `${scenario.name} - compressão`,
+            durationMs: duration(700),
+            targets: {
+              brake: [12, 5],
+              steering: [scenario.steeringPeak, scenario.steeringPeak + 8],
+              throttle: [0, 0],
+            },
+          });
+        }
         phases.push({
           name: `Apex ${rep + 1}`,
           repIndex: rep,
           label: `${scenario.name} - apex`,
-          durationMs: 900,
+          durationMs: duration(config.id === 'easy' ? 1100 : 900),
           targets: {
-            brake: [12, 0],
-            steering: [scenario.steeringPeak, scenario.steeringPeak],
+            brake: [config.id === 'hard' ? 5 : 12, 0],
+            steering: [config.id === 'hard' ? scenario.steeringPeak + 8 : scenario.steeringPeak, config.id === 'hard' ? scenario.steeringPeak + 8 : scenario.steeringPeak],
             throttle: [0, 0],
           },
         });
@@ -853,7 +965,7 @@ const CHALLENGE_LIBRARY = {
           name: `Saída ${rep + 1}`,
           repIndex: rep,
           label: `${scenario.name} - saída`,
-          durationMs: 1000,
+          durationMs: duration(config.id === 'easy' ? 1300 : 1000),
           targets: {
             brake: [0, 0],
             steering: [scenario.steeringPeak, 30],
@@ -865,6 +977,7 @@ const CHALLENGE_LIBRARY = {
       return {
         ...buildPhases(phases),
         scenario,
+        settings: config,
       };
     },
     evaluate: (samples, plan) => {
@@ -882,7 +995,8 @@ const CHALLENGE_LIBRARY = {
         steeringSeries.push(...getAxisSeries(phaseSamples, 'steering'));
       });
 
-      for (let rep = 0; rep < 2; rep += 1) {
+      const config = plan.settings || getTrailBrakingSettings();
+      for (let rep = 0; rep < config.repetitions; rep += 1) {
         const repPhases = plan.phases.filter((phase) => phase.repIndex === rep);
         const repSamples = repPhases.flatMap((phase) => getSamplesForPhase(samples, phase));
         repScores.push(scoreFromError(average(repSamples.map((sample) => Math.abs(sample.values.brake - sample.targets.brake)
@@ -890,7 +1004,7 @@ const CHALLENGE_LIBRARY = {
       }
 
       const transitionSamples = plan.phases
-        .filter((phase) => phase.name.includes('Transição'))
+        .filter((phase) => phase.name.includes('Transição') || phase.name.includes('Compressão'))
         .flatMap((phase) => getSamplesForPhase(samples, phase));
       const brakeVelocity = transitionSamples.map((sample, index) => (index === 0 ? 0 : transitionSamples[index - 1].values.brake - sample.values.brake));
       const steeringVelocity = transitionSamples.map((sample, index) => (index === 0 ? 0 : sample.values.steering - transitionSamples[index - 1].values.steering));
@@ -1087,10 +1201,7 @@ const getMissingRolesForChallenge = (challengeType) => {
 
 const getChallengeStatusText = () => {
   if (runtime.pendingChallenge) {
-    const remainingMs = Math.max(0, runtime.pendingChallenge.countdownEndsAt - Date.now());
-    return remainingMs > 0
-      ? `Começa em ${Math.ceil(remainingMs / 1000)}s`
-      : 'Preparando desafio...';
+    return 'Preparando início...';
   }
 
   if (!runtime.activeChallenge) {
@@ -1112,12 +1223,14 @@ const getChallengeTimerText = (challenge) => {
   }
 
   if (runtime.pendingChallenge === challenge) {
-    return formatCountdownSeconds(Math.max(0, challenge.countdownEndsAt - Date.now()));
+    const stepDurationMs = challenge.plan?.phases?.[0]?.durationMs || challenge.plan?.totalDurationMs || 3000;
+    return `${Math.round(stepDurationMs / 1000)}s`;
   }
 
   if (challenge.definition.id === 'brake-precision') {
     const frame = challenge.currentFrame || challenge.previewFrame;
-    const remainingMs = frame ? Math.max(0, frame.endMs - (challenge.elapsedMs || 0)) : 0;
+    const phase = frame?.phase || null;
+    const remainingMs = phase ? Math.max(0, phase.endMs - (challenge.elapsedMs || 0)) : 0;
     return formatCountdownSeconds(remainingMs);
   }
 
@@ -1159,7 +1272,7 @@ const renderChallengeSelector = () => {
     button.type = 'button';
     button.className = `challenge-chip${selectedType === definition.id ? ' challenge-chip--active' : ''}`;
     button.dataset.challengeType = definition.id;
-    button.disabled = Boolean(runtime.activeChallenge);
+    button.disabled = Boolean(runtime.activeChallenge || runtime.pendingChallenge);
     button.textContent = definition.shortTitle;
     button.addEventListener('click', () => {
       state.ui.selectedChallengeType = definition.id;
@@ -1186,8 +1299,12 @@ const renderChallengePage = () => {
   const statusNode = document.getElementById('status-text');
   const startButton = document.getElementById('start-challenge');
   const challengeMeta = document.getElementById('challenge-meta');
+  const settingsNode = document.getElementById('challenge-settings');
   const summaryNode = document.getElementById('challenge-summary');
   const breakdownNode = document.getElementById('challenge-breakdown');
+  const modalNode = document.getElementById('challenge-modal');
+  const modalCountdownNode = document.getElementById('challenge-modal-countdown');
+  const modalSubtitleNode = document.getElementById('challenge-modal-subtitle');
   const telemetryNode = document.querySelector('.challenge-telemetry');
   const primaryReading = document.getElementById('current-value');
 
@@ -1237,7 +1354,7 @@ const renderChallengePage = () => {
 
   if (timeNode) {
     if (runtime.pendingChallenge) {
-      timeNode.textContent = getChallengeTimerText(runtime.pendingChallenge);
+      timeNode.textContent = `${Math.round((runtime.pendingChallenge.plan?.phases?.[0]?.durationMs || 3000) / 1000)}s`;
     } else if (runtime.activeChallenge) {
       timeNode.textContent = getChallengeTimerText(runtime.activeChallenge);
     } else {
@@ -1254,7 +1371,7 @@ const renderChallengePage = () => {
   if (statusNode) {
     const missingRoles = getMissingRolesForChallenge(definition.id);
     statusNode.textContent = runtime.pendingChallenge
-      ? `Começa em ${Math.max(1, Math.ceil((runtime.pendingChallenge.countdownEndsAt - Date.now()) / 1000))}s`
+      ? 'Preparando início...'
       : runtime.activeChallenge
         ? getChallengeStatusText()
         : missingRoles.length
@@ -1281,13 +1398,13 @@ const renderChallengePage = () => {
 
     if (runtime.pendingChallenge) {
       summaryNode.innerHTML = `
-        <div class="summary-box summary-box--countdown">
-          <span>Começa em</span>
-          <strong>${Math.max(1, Math.ceil((runtime.pendingChallenge.countdownEndsAt - Date.now()) / 1000))}s</strong>
-        </div>
         <div class="summary-box">
           <span>Primeiro passo</span>
           <strong>${runtime.pendingChallenge.previewFrame?.phase.name || 'Preparando...'}</strong>
+        </div>
+        <div class="summary-box">
+          <span>Duração da etapa</span>
+          <strong>${Math.round((runtime.pendingChallenge.plan?.phases?.[0]?.durationMs || 3000) / 1000)}s</strong>
         </div>
       `;
     } else if (runtime.activeChallenge) {
@@ -1312,6 +1429,103 @@ const renderChallengePage = () => {
           <strong>Pronto para iniciar</strong>
         </div>
         ${settingsHtml}
+      `;
+    }
+  }
+
+  if (settingsNode) {
+    if (definition.id === 'trail-braking' && !runtime.activeChallenge && !runtime.pendingChallenge) {
+      const config = getTrailBrakingSettings();
+      settingsNode.innerHTML = `
+        <div class="challenge-settings-panel">
+          <div class="challenge-settings-panel__header">
+            <span class="section-eyebrow">Ajustes do desafio</span>
+            <h3>Trail Braking</h3>
+          </div>
+          <div class="trail-mode-grid">
+            ${Object.values(TRAIL_MODES).map((mode) => `
+              <label class="trail-mode-option${mode.id === config.id ? ' trail-mode-option--active' : ''}">
+                <input type="radio" name="trail-mode" value="${mode.id}"${mode.id === config.id ? ' checked' : ''} />
+                <span class="trail-mode-option__title">${mode.label}</span>
+                <span class="trail-mode-option__meta">${mode.repetitions} repetições • cursor ${Math.round(mode.speed * 100)}%</span>
+                <small>${mode.description}</small>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      settingsNode.querySelectorAll('input[name="trail-mode"]').forEach((input) => {
+        input.addEventListener('change', (event) => {
+          updateTrailBrakingSettings(event.target.value);
+          renderChallengePage();
+        });
+      });
+    } else if (definition.id === 'brake-precision' && !runtime.activeChallenge && !runtime.pendingChallenge) {
+      const config = getBrakePrecisionSettings();
+      settingsNode.innerHTML = `
+        <div class="challenge-settings-panel">
+          <div class="challenge-settings-panel__header">
+            <span class="section-eyebrow">Ajustes do desafio</span>
+            <h3>Brake Precision</h3>
+          </div>
+          <div class="challenge-settings-grid">
+            <label class="challenge-setting">
+              <span>Passos</span>
+              <input id="brake-precision-steps" type="number" min="1" max="12" value="${config.steps}" />
+            </label>
+            <label class="challenge-setting">
+              <span>Tempo por atraso (s)</span>
+              <input id="brake-precision-delay" type="number" min="1" max="10" step="0.5" value="${config.delaySeconds}" />
+            </label>
+            <label class="challenge-setting">
+              <span>Tolerância (%)</span>
+              <input id="brake-precision-tolerance" type="number" min="1" max="20" value="${config.tolerance}" />
+            </label>
+          </div>
+        </div>
+      `;
+
+      const stepsInput = document.getElementById('brake-precision-steps');
+      const delayInput = document.getElementById('brake-precision-delay');
+      const toleranceInput = document.getElementById('brake-precision-tolerance');
+
+      if (stepsInput) {
+        stepsInput.addEventListener('change', (event) => {
+          updateBrakePrecisionSettings({ steps: Math.max(1, Math.min(12, Math.round(Number(event.target.value) || config.steps))) });
+          renderChallengePage();
+        });
+      }
+
+      if (delayInput) {
+        delayInput.addEventListener('change', (event) => {
+          updateBrakePrecisionSettings({ delaySeconds: Math.max(1, Math.min(10, Number(event.target.value) || config.delaySeconds)) });
+          renderChallengePage();
+        });
+      }
+
+      if (toleranceInput) {
+        toleranceInput.addEventListener('change', (event) => {
+          updateBrakePrecisionSettings({ tolerance: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || config.tolerance))) });
+          renderChallengePage();
+        });
+      }
+    } else {
+      settingsNode.innerHTML = `
+        <div class="challenge-settings-panel challenge-settings-panel--static">
+          <div class="challenge-settings-panel__header">
+            <span class="section-eyebrow">Ajustes deste desafio</span>
+            <h3>${definition.title}</h3>
+          </div>
+          <div class="challenge-settings-grid">
+            ${getChallengeSettingsSummary(definition).map((item) => `
+              <div class="summary-box">
+                <span>${item.label}</span>
+                <strong>${item.value}</strong>
+              </div>
+            `).join('')}
+          </div>
+        </div>
       `;
     }
   }
@@ -1360,6 +1574,29 @@ const renderChallengePage = () => {
         <p>${Math.round((runtime.activeChallenge.currentFrame?.progress || 0) * 100)}%</p>
       </div>
     `;
+  }
+
+  if (modalNode) {
+    if (runtime.pendingChallenge) {
+      const remainingMs = Math.max(0, runtime.pendingChallenge.countdownEndsAt - Date.now());
+      modalNode.classList.remove('challenge-modal--hidden');
+      modalNode.setAttribute('aria-hidden', 'false');
+      if (modalCountdownNode) {
+        modalCountdownNode.textContent = `${Math.max(0, Math.ceil(remainingMs / 1000))}`;
+      }
+      if (modalSubtitleNode) {
+        modalSubtitleNode.textContent = `O desafio começa em ${Math.max(1, Math.ceil(remainingMs / 1000))} segundos.`;
+      }
+    } else {
+      modalNode.classList.add('challenge-modal--hidden');
+      modalNode.setAttribute('aria-hidden', 'true');
+      if (modalCountdownNode) {
+        modalCountdownNode.textContent = '3';
+      }
+      if (modalSubtitleNode) {
+        modalSubtitleNode.textContent = 'Aguarde o início para começar a medição.';
+      }
+    }
   }
 
   if (telemetryNode) {
@@ -1493,19 +1730,26 @@ const buildActualBrakeSeries = (samples) => samples.map((sample) => ({
 }));
 const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
   const frame = challenge?.currentFrame || challenge?.previewFrame || null;
+  const config = challenge?.plan?.settings || getBrakePrecisionSettings();
+  const phase = frame?.phase || challenge?.plan?.phases?.[0] || null;
   const currentValue = getSelectedRoleValueOrZero('brake');
   const targetValue = Math.round(frame?.targets?.brake?.[0] ?? frame?.targets?.brake ?? currentValue);
-  const tolerance = 3;
+  const tolerance = config.tolerance;
   const stepIndex = challenge?.plan?.phases && frame?.phase
     ? Math.max(0, challenge.plan.phases.indexOf(frame.phase))
     : 0;
-  const stepTotal = challenge?.plan?.phases?.length || definition.settings?.find((item) => item.label === 'Passos')?.value || '3';
-  const stepDurationMs = frame?.durationMs || 3000;
-  const remainingMs = runtime.pendingChallenge
-    ? Math.max(0, challenge.countdownEndsAt - Date.now())
-    : Math.max(0, stepDurationMs - ((challenge?.elapsedMs || 0) - (frame?.startMs || 0)));
-  const filledPercent = frame ? clamp(((stepDurationMs - remainingMs) / stepDurationMs) * 100) : 0;
+  const stepTotal = challenge?.plan?.phases?.length || config.steps || 3;
+  const stepDurationMs = phase?.durationMs || config.delayMs || 3000;
+  const activeStepElapsed = runtime.activeChallenge && frame
+    ? Math.max(0, challenge.elapsedMs - (phase?.startMs || 0))
+    : 0;
+  const remainingMs = runtime.activeChallenge
+    ? Math.max(0, stepDurationMs - activeStepElapsed)
+    : stepDurationMs;
   const withinTolerance = Math.abs(currentValue - targetValue) <= tolerance;
+  const timerText = runtime.activeChallenge
+    ? formatCountdownSeconds(remainingMs)
+    : `${Math.round(stepDurationMs / 1000)}s total`;
 
   visualizer.innerHTML = `
     <div class="precision-panel precision-panel--brake">
@@ -1525,25 +1769,23 @@ const renderBrakePrecisionVisualizer = (visualizer, challenge, definition) => {
           <div class="precision-meter__track">
             <div class="precision-meter__grid"></div>
             <div class="precision-meter__zone" style="bottom: ${clamp(targetValue - tolerance, 0, 100)}%; height: ${clamp(tolerance * 2, 4, 24)}%;"></div>
-            <div class="precision-meter__fill" style="height: ${currentValue}%;"></div>
+            <div class="precision-meter__fill" style="height: ${currentValue}%; opacity: ${runtime.activeChallenge ? 1 : 0.78};"></div>
             <div class="precision-meter__target" style="bottom: ${targetValue}%;"></div>
           </div>
-          <div class="precision-meter__footer">ALVO: ${targetValue}% ±${tolerance}%</div>
+          <div class="precision-meter__footer">ALVO: ${targetValue}% ±${tolerance}% • ${stepTotal} passos</div>
         </div>
         <div class="precision-ring">
           <span>TEMPO</span>
-          <div class="precision-ring__circle" style="--progress: ${frame ? clamp(1 - (remainingMs / Math.max(1, stepDurationMs)), 0, 1) : 0};">
-            <strong>${formatCountdownSeconds(remainingMs)}</strong>
+          <div class="precision-ring__circle" style="--progress: ${frame && runtime.activeChallenge ? clamp(1 - (remainingMs / Math.max(1, stepDurationMs)), 0, 1) : 0};">
+            <strong>${timerText}</strong>
           </div>
-          <small>${runtime.pendingChallenge ? '3s total' : `${Math.round(stepDurationMs / 1000)}s total`}</small>
+          <small>${Math.round(stepDurationMs / 1000)}s total</small>
         </div>
       </div>
-      <div class="precision-panel__status ${withinTolerance ? 'precision-panel__status--good' : ''}">
-        ${runtime.pendingChallenge
-          ? `Vai começar em ${Math.max(1, Math.ceil(remainingMs / 1000))}s`
-          : withinTolerance
-            ? 'NA ZONA - MANTENHA!'
-            : 'Ajuste fino da pressão'}
+      <div class="precision-panel__status ${runtime.activeChallenge && withinTolerance ? 'precision-panel__status--good' : ''}">
+        ${runtime.activeChallenge
+          ? (withinTolerance ? 'NA ZONA - MANTENHA!' : 'Ajuste fino da pressão')
+          : 'Aguardando início'}
       </div>
     </div>
   `;
@@ -1569,13 +1811,18 @@ const renderTrailBrakingVisualizer = (visualizer, challenge, definition) => {
     const x = padding + ((index / Math.max(1, totalDurationMs / 1000)) * plotWidth);
     return `<text x="${x}" y="${height - 8}" class="trail-chart__tick">${index}s</text>`;
   }).join('');
-  const score = runtime.activeChallenge?.liveScore != null ? Math.round(runtime.activeChallenge.liveScore) : '--';
+  const completed = Boolean(challenge?.completed);
+  const score = runtime.activeChallenge?.liveScore != null
+    ? Math.round(runtime.activeChallenge.liveScore)
+    : completed && challenge.result?.score != null
+      ? Math.round(challenge.result.score)
+      : '--';
 
   visualizer.innerHTML = `
-    <div class="trail-panel">
+    <div class="trail-panel${completed ? ' trail-panel--completed' : ''}">
       <div class="trail-panel__header">
         <div>
-          <p class="section-eyebrow">Trail Braking</p>
+          <p class="section-eyebrow">${completed ? 'Resultado final' : 'Trail Braking'}</p>
           <h3>${currentFrame?.phase?.name || definition.title}</h3>
         </div>
         <div class="trail-panel__score">
@@ -1587,7 +1834,7 @@ const renderTrailBrakingVisualizer = (visualizer, challenge, definition) => {
         <rect x="0" y="0" width="${width}" height="${height}" class="trail-chart__background" />
         ${gridLines}
         ${tickLabels}
-        <line x1="${cursorX}" y1="${padding}" x2="${cursorX}" y2="${height - padding}" class="trail-chart__cursor" />
+        ${completed ? '' : `<line x1="${cursorX}" y1="${padding}" x2="${cursorX}" y2="${height - padding}" class="trail-chart__cursor" />`}
         <polyline points="${idealPoints}" class="trail-chart__ideal" />
         <polyline points="${actualPoints}" class="trail-chart__actual" />
       </svg>
@@ -1655,8 +1902,9 @@ const drawVisualizer = () => {
   if (!visualizer) return;
 
   const definition = getCurrentChallengeDefinition();
-  const challenge = runtime.activeChallenge || runtime.pendingChallenge;
   const presentationMode = getChallengeVisualizationMode(definition);
+  const challenge = runtime.activeChallenge || runtime.pendingChallenge
+    || (presentationMode === 'trail-graph' ? runtime.lastCompletedChallenge : null);
 
   visualizer.innerHTML = '';
   visualizer.className = `challenge-visualizer challenge-visualizer--${presentationMode}`;
@@ -1685,6 +1933,13 @@ const finalizeChallenge = () => {
   stopActiveChallenge();
 
   const result = challenge.definition.evaluate(challenge.samples, challenge.plan);
+  runtime.lastCompletedChallenge = {
+    ...challenge,
+    completed: true,
+    elapsedMs: challenge.plan.totalDurationMs,
+    currentFrame: getFrameAt(challenge.plan, challenge.plan.totalDurationMs),
+    result,
+  };
   state.challenges.push({
     ...result,
     title: challenge.definition.title,
@@ -1762,6 +2017,7 @@ const startSelectedChallenge = () => {
   stopActiveChallenge();
   runtime.activeChallenge = null;
   runtime.pendingChallenge = null;
+  runtime.lastCompletedChallenge = null;
   const plan = definition.buildPlan();
   runtime.pendingChallenge = {
     definition,
