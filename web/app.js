@@ -113,7 +113,7 @@ const runtime = {
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.20.0';
+const APP_VERSION = 'v0.22.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;

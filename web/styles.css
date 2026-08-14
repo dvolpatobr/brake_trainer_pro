@@ -1193,18 +1193,115 @@ select {
     flex-direction: column;
   }
 
+  .challenge-card {
+    padding: 16px;
+  }
+
   .challenge-grid,
   .skill-grid,
-  .challenge-kpis,
-  .challenge-telemetry,
   .challenge-settings-grid,
   .trail-mode-grid,
   .precision-panel__content {
     grid-template-columns: 1fr;
   }
 
+  .challenge-grid {
+    gap: 14px;
+  }
+
   .challenge-toolbar {
     flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .challenge-selector {
+    margin-bottom: 12px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .challenge-selector::-webkit-scrollbar {
+    display: none;
+  }
+
+  .challenge-chip {
+    flex: 0 0 auto;
+  }
+
+  .challenge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .challenge-brief {
+    order: 2;
+  }
+
+  .challenge-play {
+    order: 1;
+  }
+
+  .challenge-kpis,
+  .challenge-telemetry {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .challenge-kpi,
+  .telemetry-card {
+    padding: 10px;
+  }
+
+  .challenge-kpi span,
+  .telemetry-card span {
+    font-size: 10px;
+  }
+
+  .challenge-kpi strong,
+  .telemetry-card strong {
+    font-size: 18px;
+  }
+
+  .challenge-description,
+  .challenge-rules,
+  .challenge-summary,
+  .challenge-settings,
+  .challenge-primary-reading {
+    display: none;
+  }
+
+  .challenge-objective {
+    margin: 0 0 12px;
+    padding: 12px;
+  }
+
+  .button-row {
+    gap: 10px;
+  }
+
+  .button-row .button {
+    width: 100%;
+  }
+
+  .challenge-visualizer {
+    min-height: 200px;
+    margin: 14px 0;
+  }
+
+  .challenge-play,
+  .challenge-brief {
+    padding: 14px;
+  }
+
+  .challenge-brief .challenge-status {
+    margin-top: 10px;
+  }
+
+  .challenge-toolbar {
+    margin-bottom: 12px;
   }
 
   .device-grid {
