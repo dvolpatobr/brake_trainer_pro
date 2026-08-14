@@ -14,21 +14,23 @@
   <main class="page-container">
     <section class="settings-card">
       <h2>Dispositivos HID</h2>
-      <p>Adicione um dispositivo para cada função. Use uma caixa para freio e outra para direção.</p>
+      <p>Adicione um dispositivo uma vez e depois escolha em qual controle ele será usado nos combos abaixo.</p>
+
+      <div class="settings-actions settings-actions--top">
+        <button id="add-device" class="button button--primary" type="button">Adicionar dispositivo HID</button>
+        <p class="settings-actions__note">O mesmo device aparece nas listas de freio, direção e acelerador.</p>
+      </div>
 
       <div class="device-grid">
-        <div class="device-panel">
+        <div class="device-panel device-panel--brake">
           <h3>Freio</h3>
           <p id="brake-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
-          <button id="add-brake-device" class="button">Adicionar dispositivo de freio</button>
           <label>
             <span>Selecionar freio</span>
             <select id="brake-device"></select>
           </label>
-          <label>
-            <span>Eixo do freio</span>
-            <select id="brake-axis"></select>
-          </label>
+          <button id="detect-brake-axis" class="button button--detect button--detect-brake" type="button">Detectar eixo</button>
+          <p id="brake-axis-detection-status" class="device-detection-status">Aguardando detecção automática.</p>
           <div class="axis-meter axis-meter--brake">
             <div class="axis-meter__header">
               <span>Leitura do eixo</span>
@@ -40,18 +42,15 @@
           </div>
         </div>
 
-        <div class="device-panel">
+        <div class="device-panel device-panel--steering">
           <h3>Direção</h3>
           <p id="steering-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
-          <button id="add-steering-device" class="button">Adicionar dispositivo de direção</button>
           <label>
             <span>Selecionar direção</span>
             <select id="steering-device"></select>
           </label>
-          <label>
-            <span>Eixo da direção</span>
-            <select id="steering-axis"></select>
-          </label>
+          <button id="detect-steering-axis" class="button button--detect button--detect-steering" type="button">Detectar eixo</button>
+          <p id="steering-axis-detection-status" class="device-detection-status">Aguardando detecção automática.</p>
           <div class="axis-meter axis-meter--steering">
             <div class="axis-meter__header">
               <span>Leitura do eixo</span>
@@ -63,18 +62,15 @@
           </div>
         </div>
 
-        <div class="device-panel">
+        <div class="device-panel device-panel--throttle">
           <h3>Acelerador</h3>
           <p id="throttle-device-status" class="device-status">Nenhum dispositivo selecionado.</p>
-          <button id="add-throttle-device" class="button">Adicionar dispositivo de acelerador</button>
           <label>
             <span>Selecionar acelerador</span>
             <select id="throttle-device"></select>
           </label>
-          <label>
-            <span>Eixo do acelerador</span>
-            <select id="throttle-axis"></select>
-          </label>
+          <button id="detect-throttle-axis" class="button button--detect button--detect-throttle" type="button">Detectar eixo</button>
+          <p id="throttle-axis-detection-status" class="device-detection-status">Aguardando detecção automática.</p>
           <div class="axis-meter axis-meter--throttle">
             <div class="axis-meter__header">
               <span>Leitura do eixo</span>
@@ -85,6 +81,11 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="settings-actions">
+        <button id="clear-all-axes" class="button button--danger" type="button">Limpar todos os eixos</button>
+        <p class="settings-actions__note">Isso limpa os devices e eixos selecionados nas três caixas, sem apagar a lista de devices já conectados.</p>
       </div>
     </section>
 

@@ -76,6 +76,25 @@ body {
   background: #263244;
 }
 
+.button--primary {
+  border-color: rgba(123, 184, 255, 0.55);
+  background: linear-gradient(135deg, rgba(24, 48, 74, 0.96), rgba(42, 85, 136, 0.92));
+}
+
+.button--primary:hover {
+  background: linear-gradient(135deg, rgba(30, 58, 88, 0.98), rgba(52, 100, 158, 0.95));
+}
+
+.button--danger {
+  border-color: rgba(255, 155, 155, 0.5);
+  background: linear-gradient(135deg, rgba(64, 24, 28, 0.96), rgba(111, 35, 43, 0.9));
+  color: #ffe9e9;
+}
+
+.button--danger:hover {
+  background: linear-gradient(135deg, rgba(84, 28, 34, 0.96), rgba(130, 42, 51, 0.94));
+}
+
 label {
   display: block;
   margin-bottom: 18px;
@@ -109,11 +128,90 @@ select {
   gap: 16px;
 }
 
+.settings-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.settings-actions--top {
+  margin-bottom: 18px;
+}
+
+.settings-actions__note {
+  margin: 0;
+  color: #96a5ba;
+  font-size: 14px;
+}
+
 .device-panel {
   border: 1px solid #2a3240;
   border-radius: 16px;
   padding: 18px;
   background: #0f1319;
+}
+
+.device-panel .button--detect {
+  margin-top: 4px;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.device-panel .button--detect:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.device-panel--brake .button--detect-brake {
+  border-color: rgba(234, 240, 248, 0.55);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(69, 90, 117, 0.92));
+}
+
+.device-panel--steering .button--detect-steering {
+  border-color: rgba(121, 215, 255, 0.55);
+  background: linear-gradient(135deg, rgba(28, 48, 68, 0.96), rgba(45, 111, 189, 0.9));
+}
+
+.device-panel--throttle .button--detect-throttle {
+  border-color: rgba(141, 243, 167, 0.55);
+  background: linear-gradient(135deg, rgba(23, 52, 36, 0.96), rgba(35, 126, 76, 0.9));
+}
+
+.button--detecting {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(123, 184, 255, 0.22) inset, 0 0 18px rgba(123, 184, 255, 0.22);
+  animation: detectPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes detectPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(123, 184, 255, 0.22) inset, 0 0 18px rgba(123, 184, 255, 0.16);
+  }
+
+  50% {
+    box-shadow: 0 0 0 1px rgba(123, 184, 255, 0.34) inset, 0 0 26px rgba(123, 184, 255, 0.3);
+  }
+}
+
+.device-detection-status {
+  margin: 10px 0 0;
+  min-height: 38px;
+  color: #96a5ba;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.device-detection-status--capturing,
+.device-detection-status--active {
+  color: #7bb8ff;
+}
+
+.device-detection-status--success {
+  color: #8df3a7;
+}
+
+.device-detection-status--error {
+  color: #ff9b9b;
 }
 
 .device-panel h3 {

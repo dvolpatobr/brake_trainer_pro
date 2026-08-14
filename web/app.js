@@ -96,17 +96,24 @@ const saveState = (state) => {
 
 const state = getState();
 const activeDevices = new Map();
+const AXIS_DETECTION_WINDOW_MS = 3000;
+const AXIS_DETECTION_MIN_VARIATION = 30;
 const runtime = {
   activeChallenge: null,
   pendingChallenge: null,
   lastCompletedChallenge: null,
   timerId: null,
+  axisDetection: {
+    brake: { session: null, status: { state: 'idle', message: 'Aguardando detecção automática.' } },
+    steering: { session: null, status: { state: 'idle', message: 'Aguardando detecção automática.' } },
+    throttle: { session: null, status: { state: 'idle', message: 'Aguardando detecção automática.' } },
+  },
 };
 
 const isChrome = () => /Chrome/.test(navigator.userAgent) && !/Edg|OPR|Brave/.test(navigator.userAgent);
 const page = document.body.dataset.page;
 // Bump this label on every repo change so the footer always reflects the latest build.
-const APP_VERSION = 'v0.13.0';
+const APP_VERSION = 'v0.20.0';
 
 const toDeviceId = (device) => `${device.vendorId}:${device.productId}:${device.productName}`;
 const getDeviceLabel = (device) => `${device.productName || 'HID'} (${device.vendorId}:${device.productId})`;
@@ -117,7 +124,8 @@ const ROLE_DEFS = {
     shortLabel: 'Brake',
     colorClass: 'brake',
     deviceSelectId: 'brake-device',
-    axisSelectId: 'brake-axis',
+    detectionButtonId: 'detect-brake-axis',
+    detectionStatusId: 'brake-axis-detection-status',
     meterFillId: 'brake-axis-fill',
     meterValueId: 'brake-axis-value',
     challengeValueId: 'challenge-brake-value',
@@ -128,7 +136,8 @@ const ROLE_DEFS = {
     shortLabel: 'Steering',
     colorClass: 'steering',
     deviceSelectId: 'steering-device',
-    axisSelectId: 'steering-axis',
+    detectionButtonId: 'detect-steering-axis',
+    detectionStatusId: 'steering-axis-detection-status',
     meterFillId: 'steering-axis-fill',
     meterValueId: 'steering-axis-value',
     challengeValueId: 'challenge-steering-value',
@@ -139,7 +148,8 @@ const ROLE_DEFS = {
     shortLabel: 'Throttle',
     colorClass: 'throttle',
     deviceSelectId: 'throttle-device',
-    axisSelectId: 'throttle-axis',
+    detectionButtonId: 'detect-throttle-axis',
+    detectionStatusId: 'throttle-axis-detection-status',
     meterFillId: 'throttle-axis-fill',
     meterValueId: 'throttle-axis-value',
     challengeValueId: 'challenge-throttle-value',
@@ -210,6 +220,22 @@ const setRoleAxisIndex = (role, axisIndex) => {
   }
 };
 const getRoleAxisIndex = (role) => getRoleSelection(role).axisIndex || 0;
+const resetAllAxisSelections = () => {
+  stopAxisDetection('brake');
+  stopAxisDetection('steering');
+  stopAxisDetection('throttle');
+  state.selectedBrakeDeviceId = null;
+  state.selectedSteeringDeviceId = null;
+  state.selectedThrottleDeviceId = null;
+  setRoleAxisIndex('brake', 0);
+  setRoleAxisIndex('steering', 0);
+  setRoleAxisIndex('throttle', 0);
+  updateConfig();
+  renderSelectedDeviceSummary();
+  updateDeviceSelectors();
+  renderAxisDetectionStatuses();
+  refreshLiveReadouts();
+};
 const getDeviceValue = (deviceId, axisIndex = 0) => {
   const report = getDeviceReportBytes(deviceId);
   if (!report.length) {
@@ -233,6 +259,204 @@ const getSelectedRoleValue = (role) => {
   return getDeviceValue(selection.deviceId, selection.axisIndex);
 };
 const getSelectedRoleValueOrZero = (role) => getSelectedRoleValue(role) ?? 0;
+const getAxisDetectionState = (role) => runtime.axisDetection[role];
+const setAxisDetectionStatus = (role, patch) => {
+  const roleState = getAxisDetectionState(role);
+  roleState.status = {
+    ...roleState.status,
+    ...patch,
+  };
+};
+const clearAxisDetectionSession = (role) => {
+  const roleState = getAxisDetectionState(role);
+  if (roleState.session?.timeoutId) {
+    clearTimeout(roleState.session.timeoutId);
+  }
+  if (roleState.session?.intervalId) {
+    clearInterval(roleState.session.intervalId);
+  }
+  roleState.session = null;
+};
+const stopAxisDetection = (role, status = {
+  state: 'idle',
+  message: 'Aguardando detecção automática.',
+}) => {
+  clearAxisDetectionSession(role);
+  const roleState = getAxisDetectionState(role);
+  roleState.status = status;
+};
+const renderAxisDetectionStatus = (role) => {
+  const roleDef = ROLE_DEFS[role];
+  const statusNode = document.getElementById(roleDef.detectionStatusId);
+  const buttonNode = document.getElementById(roleDef.detectionButtonId);
+  if (!statusNode && !buttonNode) return;
+
+  const roleState = getAxisDetectionState(role);
+  const selection = getRoleSelection(role);
+  const currentAxisIndex = getRoleAxisIndex(role);
+
+  if (buttonNode) {
+    buttonNode.disabled = !selection.deviceId || Boolean(roleState.session);
+    buttonNode.classList.toggle('button--detecting', Boolean(roleState.session));
+    buttonNode.textContent = roleState.session
+      ? `Detectando... ${Math.max(1, Math.ceil((roleState.session.endsAt - Date.now()) / 1000))}s`
+      : 'Detectar eixo';
+  }
+
+  if (statusNode) {
+    let message = roleState.status.message || 'Aguardando detecção automática.';
+    if (!roleState.session && roleState.status.state === 'idle') {
+      message = selection.deviceId
+        ? `Eixo atual: ${getAxisLabel(currentAxisIndex)}.`
+        : 'Selecione um dispositivo para detectar o eixo.';
+    } else if (roleState.session) {
+      message = `Mova o controle agora. ${Math.max(1, Math.ceil((roleState.session.endsAt - Date.now()) / 1000))}s restantes.`;
+    }
+
+    statusNode.textContent = message;
+    statusNode.classList.remove(
+      'device-detection-status--capturing',
+      'device-detection-status--active',
+      'device-detection-status--success',
+      'device-detection-status--error',
+    );
+    statusNode.classList.add(`device-detection-status--${roleState.status.state}`);
+  }
+};
+const renderAxisDetectionStatuses = () => {
+  getRoleKeys().forEach((role) => renderAxisDetectionStatus(role));
+};
+const getAxisSampleRange = (samples, axisIndex) => {
+  const values = samples
+    .map((sample) => {
+      const rawValue = sample[axisIndex];
+      if (!Number.isFinite(rawValue)) {
+        return null;
+      }
+      return Math.round(Math.min(100, Math.max(0, (rawValue / 255) * 100)));
+    })
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length <= 1) {
+    return 0;
+  }
+
+  return Math.max(...values) - Math.min(...values);
+};
+const getBestAxisFromSamples = (samples) => {
+  const maxLength = samples.reduce((length, sample) => Math.max(length, sample.length), 0);
+  if (maxLength === 0 || samples.length === 0) {
+    return null;
+  }
+
+  let bestAxisIndex = null;
+  let bestVariation = -1;
+
+  for (let axisIndex = 0; axisIndex < maxLength; axisIndex += 1) {
+    const variation = getAxisSampleRange(samples, axisIndex);
+    if (variation > bestVariation) {
+      bestVariation = variation;
+      bestAxisIndex = axisIndex;
+    }
+  }
+
+  if (bestAxisIndex == null || bestVariation < AXIS_DETECTION_MIN_VARIATION) {
+    return null;
+  }
+
+  return {
+    axisIndex: bestAxisIndex,
+    variation: bestVariation,
+  };
+};
+const recordAxisDetectionSample = (role, deviceId, bytes) => {
+  const roleState = getAxisDetectionState(role);
+  const session = roleState.session;
+  if (!session || session.deviceId !== deviceId) {
+    return;
+  }
+
+  session.samples.push([...bytes]);
+};
+const finalizeAxisDetection = (role, reason = 'timeout') => {
+  const roleState = getAxisDetectionState(role);
+  const session = roleState.session;
+  if (!session) {
+    return;
+  }
+
+  clearAxisDetectionSession(role);
+
+  const currentSelection = getRoleSelection(role);
+  if (currentSelection.deviceId !== session.deviceId) {
+    roleState.status = {
+      state: 'error',
+      message: 'Detecção cancelada porque o dispositivo mudou.',
+    };
+    renderAxisDetectionStatus(role);
+    return;
+  }
+
+  const bestAxis = getBestAxisFromSamples(session.samples);
+  if (!bestAxis) {
+    roleState.status = {
+      state: 'error',
+      message: 'Nenhum eixo com variação mínima de 30% foi identificado.',
+    };
+    renderAxisDetectionStatus(role);
+    return;
+  }
+
+  setRoleAxisIndex(role, bestAxis.axisIndex);
+  roleState.status = {
+    state: 'success',
+    message: `Eixo detectado: ${getAxisLabel(bestAxis.axisIndex)} (${Math.round(bestAxis.variation)}% de variação).`,
+    axisIndex: bestAxis.axisIndex,
+    variation: bestAxis.variation,
+  };
+  updateConfig();
+  renderSelectedDeviceSummary();
+  updateDeviceSelectors();
+  refreshLiveReadouts();
+  renderAxisDetectionStatus(role);
+};
+const startAxisDetection = (role) => {
+  const selection = getRoleSelection(role);
+  if (!selection.deviceId) {
+    setAxisDetectionStatus(role, {
+      state: 'error',
+      message: 'Selecione um dispositivo antes de detectar o eixo.',
+    });
+    renderAxisDetectionStatus(role);
+    return;
+  }
+
+  const roleState = getAxisDetectionState(role);
+  clearAxisDetectionSession(role);
+  roleState.status = {
+    state: 'capturing',
+    message: 'Mova o controle agora.',
+  };
+
+  const session = {
+    deviceId: selection.deviceId,
+    startedAt: Date.now(),
+    endsAt: Date.now() + AXIS_DETECTION_WINDOW_MS,
+    samples: [],
+    timeoutId: null,
+    intervalId: null,
+  };
+
+  const latestReport = getDeviceReportBytes(selection.deviceId);
+  if (latestReport.length) {
+    session.samples.push([...latestReport]);
+  }
+
+  roleState.session = session;
+  session.timeoutId = setTimeout(() => finalizeAxisDetection(role, 'timeout'), AXIS_DETECTION_WINDOW_MS);
+  session.intervalId = setInterval(() => renderAxisDetectionStatus(role), 100);
+  renderAxisDetectionStatus(role);
+};
 const getBrakePrecisionSettings = () => {
   const stored = state.challengeSettings?.brakePrecision || {};
   const steps = Math.max(1, Math.min(12, Math.round(Number(stored.steps) || 3)));
@@ -398,37 +622,37 @@ const refreshLiveReadouts = () => {
 };
 
 const setSelectedDeviceForRole = (role, deviceId) => {
+  const previousSelection = getRoleSelection(role);
+  if (getAxisDetectionState(role).session) {
+    stopAxisDetection(role, {
+      state: 'error',
+      message: 'Detecção cancelada porque o dispositivo mudou.',
+    });
+  }
+
   if (role === 'brake') {
     state.selectedBrakeDeviceId = deviceId || null;
-    if (!deviceId) {
+    if (!deviceId || previousSelection.deviceId !== deviceId) {
       state.selectedBrakeAxisIndex = 0;
     }
   }
 
   if (role === 'steering') {
     state.selectedSteeringDeviceId = deviceId || null;
-    if (!deviceId) {
+    if (!deviceId || previousSelection.deviceId !== deviceId) {
       state.selectedSteeringAxisIndex = 0;
     }
   }
 
   if (role === 'throttle') {
     state.selectedThrottleDeviceId = deviceId || null;
-    if (!deviceId) {
+    if (!deviceId || previousSelection.deviceId !== deviceId) {
       state.selectedThrottleAxisIndex = 0;
     }
   }
 
   renderSelectedDeviceSummary();
   updateDeviceSelectors();
-  refreshLiveReadouts();
-  updateConfig();
-};
-
-const setSelectedAxisForRole = (role, axisIndex) => {
-  const normalizedAxisIndex = Math.max(0, Number(axisIndex) || 0);
-  setRoleAxisIndex(role, normalizedAxisIndex);
-  renderSelectedDeviceSummary();
   refreshLiveReadouts();
   updateConfig();
 };
@@ -443,7 +667,6 @@ const updateDeviceSelectors = () => {
   const roleSelects = getRoleKeys().reduce((acc, role) => {
     acc[role] = {
       deviceSelect: document.getElementById(ROLE_DEFS[role].deviceSelectId),
-      axisSelect: document.getElementById(ROLE_DEFS[role].axisSelectId),
     };
     return acc;
   }, {});
@@ -456,39 +679,8 @@ const updateDeviceSelectors = () => {
     select.appendChild(option);
   };
 
-  const populateAxisSelect = (select, role, deviceId) => {
-    if (!select) return;
-
-    select.innerHTML = '';
-
-    const placeholder = document.createElement('option');
-    placeholder.value = '0';
-    placeholder.textContent = deviceId ? 'Eixo 1' : 'Selecione o dispositivo primeiro';
-    select.appendChild(placeholder);
-
-    if (!deviceId) {
-      select.disabled = true;
-      select.value = '0';
-      return;
-    }
-
-    const axisCount = getDeviceAxisCount(deviceId);
-    for (let axisIndex = 1; axisIndex < axisCount; axisIndex += 1) {
-      const option = document.createElement('option');
-      option.value = String(axisIndex);
-      option.textContent = getAxisLabel(axisIndex);
-      select.appendChild(option);
-    }
-
-    const currentAxisIndex = Math.min(getRoleAxisIndex(role), axisCount - 1);
-    setRoleAxisIndex(role, currentAxisIndex);
-    select.disabled = false;
-    select.value = String(currentAxisIndex);
-  };
-
   getRoleKeys().forEach((role) => {
     const deviceSelect = roleSelects[role].deviceSelect;
-    const axisSelect = roleSelects[role].axisSelect;
     if (!deviceSelect) return;
 
     deviceSelect.innerHTML = '';
@@ -497,6 +689,13 @@ const updateDeviceSelectors = () => {
     placeholder.value = '';
     placeholder.textContent = `Selecione ${ROLE_DEFS[role].label.toLowerCase()}`;
     deviceSelect.appendChild(placeholder);
+
+    state.devices.forEach((device) => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = getDeviceLabel(device);
+      deviceSelect.appendChild(option);
+    });
 
     if (state.devices.length === 0) {
       deviceSelect.disabled = true;
@@ -507,11 +706,10 @@ const updateDeviceSelectors = () => {
         deviceSelect.value = selection.deviceId;
       }
     }
-
-    populateAxisSelect(axisSelect, role, getRoleSelection(role).deviceId);
   });
 
   renderSelectedDeviceSummary();
+  renderAxisDetectionStatuses();
 };
 
 const normalizeReportValue = (data, axisIndex = 0) => {
@@ -544,6 +742,7 @@ const onInputReport = (event) => {
     if (deviceId === state.selectedBrakeDeviceId) {
       state.currentValue = getSelectedRoleValue('brake') ?? 0;
     }
+    getRoleKeys().forEach((role) => recordAxisDetectionSample(role, deviceId, bytes));
     if (
       axisCountChanged
       && (
@@ -591,17 +790,13 @@ const setupHIDListeners = async () => {
   });
 };
 
-const requestHIDForRole = async (role) => {
+const requestHIDDevice = async () => {
   try {
     const requestedDevices = await navigator.hid.requestDevice({ filters: [] });
     const devices = Array.from(requestedDevices);
     const mapped = devices.map(mapHIDDeviceToSummary);
 
     mergeAuthorizedDevices(mapped);
-
-    if (mapped.length) {
-      setSelectedDeviceForRole(role, mapped[0].deviceId);
-    }
 
     await setupHIDListeners();
     updateDeviceSelectors();
@@ -611,25 +806,23 @@ const requestHIDForRole = async (role) => {
 };
 
 const bindSettings = () => {
-  const brakeButton = document.getElementById('add-brake-device');
-  const steeringButton = document.getElementById('add-steering-device');
-  const throttleButton = document.getElementById('add-throttle-device');
+  const addDeviceButton = document.getElementById('add-device');
+  const clearAllAxesButton = document.getElementById('clear-all-axes');
 
-  const bindDeviceButton = (button, role) => {
-    if (!button) return;
-
-    button.addEventListener('click', () => {
+  if (addDeviceButton) {
+    addDeviceButton.addEventListener('click', () => {
       if (!navigator.hid) {
         alert('WebHID não está disponível neste navegador. Use Chrome ou Edge.');
         return;
       }
-      requestHIDForRole(role);
-    });
-  };
 
-  bindDeviceButton(brakeButton, 'brake');
-  bindDeviceButton(steeringButton, 'steering');
-  bindDeviceButton(throttleButton, 'throttle');
+      requestHIDDevice();
+    });
+  }
+
+  if (clearAllAxesButton) {
+    clearAllAxesButton.addEventListener('click', resetAllAxisSelections);
+  }
 
   const brakeSelect = document.getElementById('brake-device');
   const steeringSelect = document.getElementById('steering-device');
@@ -653,28 +846,12 @@ const bindSettings = () => {
     });
   }
 
-  const brakeAxisSelect = document.getElementById('brake-axis');
-  const steeringAxisSelect = document.getElementById('steering-axis');
+  getRoleKeys().forEach((role) => {
+    const detectButton = document.getElementById(ROLE_DEFS[role].detectionButtonId);
+    if (!detectButton) return;
 
-  if (brakeAxisSelect) {
-    brakeAxisSelect.addEventListener('change', (event) => {
-      setSelectedAxisForRole('brake', event.target.value);
-    });
-  }
-
-  if (steeringAxisSelect) {
-    steeringAxisSelect.addEventListener('change', (event) => {
-      setSelectedAxisForRole('steering', event.target.value);
-    });
-  }
-
-  const throttleAxisSelect = document.getElementById('throttle-axis');
-
-  if (throttleAxisSelect) {
-    throttleAxisSelect.addEventListener('change', (event) => {
-      setSelectedAxisForRole('throttle', event.target.value);
-    });
-  }
+    detectButton.addEventListener('click', () => startAxisDetection(role));
+  });
 
   updateDeviceSelectors();
 };
@@ -2057,13 +2234,9 @@ const bindChallengeControls = () => {
 const updateStateFromSelectionInputs = () => {
   getRoleKeys().forEach((role) => {
     const deviceSelect = document.getElementById(ROLE_DEFS[role].deviceSelectId);
-    const axisSelect = document.getElementById(ROLE_DEFS[role].axisSelectId);
     if (deviceSelect) {
       const selection = getRoleSelection(role);
       deviceSelect.value = selection.deviceId || '';
-    }
-    if (axisSelect) {
-      axisSelect.value = String(getRoleSelection(role).axisIndex || 0);
     }
   });
 };
